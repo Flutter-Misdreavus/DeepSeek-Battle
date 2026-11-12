@@ -1,0 +1,34 @@
+# Godot
+.godot/
+*.tmp
+
+# Build output
+build/
+
+# AI working environment (not published)
+.agents/
+.claude/
+.dsh/
+.codex/
+CLAUDE.md
+AGENTS.md
+tools/
+ref/
+
+# Documents (not published)
+*.md
+
+# Third-party audio and lyrics (no redistribution license)
+assets/audio/
+assets/data/
+game/audio/music/
+game/audio/m0/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc
+
+# Redundant source font (the game ships the woff2)
+assets/fonts/*.ttf
