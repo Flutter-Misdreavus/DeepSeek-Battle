@@ -31,6 +31,7 @@ var _typing := false
 var _voice := "text_sys"
 var _last_blip := 0
 var text_visible := true
+var _free_typing := false
 
 # 选项
 var _opts: Array = []
@@ -62,6 +63,9 @@ func _process(dt: float) -> void:
 		if n > _last_blip and n % 2 == 0:
 			_last_blip = n
 			Sfx.play(_voice)
+		if _shown >= _total and _free_typing:
+			_typing = false
+			_free_typing = false
 	if _bar_on and _bar_hit < 0.0:
 		_bar_x += dt * 420.0
 	if _bar_blink > 0.0:
@@ -96,6 +100,7 @@ func type_text(text: String, col := C.WHITE, voice := "text_sys", wait := true) 
 	_last_blip = 0
 	_voice = voice
 	_typing = true
+	_free_typing = false
 	Inp.take_ok()
 	Inp.take_tap()
 	while _shown < _total:
@@ -105,6 +110,17 @@ func type_text(text: String, col := C.WHITE, voice := "text_sys", wait := true) 
 	_typing = false
 	if wait:
 		await wait_confirm()
+
+
+## 开始打字但不等、不读输入（你的回合的旁白：边打字边可以选按钮）。animate = false 时直接整段显示
+func start_typing(text: String, col := C.WHITE, animate := true) -> void:
+	set_text(text, col)
+	if animate:
+		_shown = 0.0
+		_last_blip = 0
+		_voice = "text_sys"
+		_typing = true
+		_free_typing = true
 
 
 ## 直接显示整段文字（不打字）
@@ -131,7 +147,7 @@ func clear_text() -> void:
 
 func wait_confirm() -> void:
 	if _auto():
-		await get_tree().create_timer(0.35).timeout
+		await get_tree().create_timer(0.35, false).timeout
 		return
 	while true:
 		await get_tree().process_frame
@@ -246,7 +262,7 @@ func fight_bar() -> float:
 			acc = clampf(1.0 - absf(_bar_x - BAR_AREA.get_center().x) / (BAR_AREA.size.x / 2.0), 0.0, 1.0)
 			_bar_blink = 0.5
 			break
-	await get_tree().create_timer(0.5).timeout
+	await get_tree().create_timer(0.5, false).timeout
 	_bar_on = false
 	return acc
 
@@ -341,7 +357,7 @@ func _draw_options() -> void:
 		if i == _opt_sel:
 			Px.heart(self, p + Vector2(-11, 6))
 	if _back:
-		Px.text(self, BACK_RECT.position, "‹ 返回", C.GRAY)
+		Px.text(self, BACK_RECT.position, "← 返回", C.GRAY)
 
 
 func _draw_bar() -> void:

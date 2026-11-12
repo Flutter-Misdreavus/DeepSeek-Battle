@@ -11,6 +11,10 @@ var dir := Vector2i.ZERO          # 本帧刚按下的方向（菜单用）
 var tap = null                    # 本帧的点按位置（视口坐标），没有则 null
 var drag := Vector2.ZERO          # 本帧触屏拖动位移（视口坐标）
 var touching := false
+var title_h := 14.0                # 视口坐标里标题栏的下沿（battle 设置）；点在这上面的算标题栏点按
+var title_tap = null
+var _p_title_tap = null
+var locked := false               # 暂停菜单打开时为 true：普通读取一律读不到，只有 force = true 能读
 
 var _p_ok := false
 var _p_cancel := false
@@ -32,34 +36,50 @@ func _process(_dt: float) -> void:
 	pause = _p_pause
 	dir = _p_dir
 	tap = _p_tap
+	title_tap = _p_title_tap
 	drag = _p_drag
 	_p_ok = false
 	_p_cancel = false
 	_p_pause = false
 	_p_dir = Vector2i.ZERO
 	_p_tap = null
+	_p_title_tap = null
 	_p_drag = Vector2.ZERO
 
 
-func take_ok() -> bool:
+func take_title_tap():
+	var v = title_tap
+	title_tap = null
+	return v
+
+
+func take_ok(force := false) -> bool:
+	if locked and not force:
+		return false
 	var v := ok
 	ok = false
 	return v
 
 
-func take_cancel() -> bool:
+func take_cancel(force := false) -> bool:
+	if locked and not force:
+		return false
 	var v := cancel
 	cancel = false
 	return v
 
 
-func take_tap():
+func take_tap(force := false):
+	if locked and not force:
+		return null
 	var v = tap
 	tap = null
 	return v
 
 
-func take_dir() -> Vector2i:
+func take_dir(force := false) -> Vector2i:
+	if locked and not force:
+		return Vector2i.ZERO
 	var v := dir
 	dir = Vector2i.ZERO
 	return v
@@ -67,6 +87,8 @@ func take_dir() -> Vector2i:
 
 ## 持续按住的方向（移动红心用）。斜向两轴都满速，和传说之下一样不做归一化。
 func move_vec() -> Vector2:
+	if locked:
+		return Vector2.ZERO
 	var x := float(Input.is_key_pressed(KEY_RIGHT) or Input.is_key_pressed(KEY_D)) - float(Input.is_key_pressed(KEY_LEFT) or Input.is_key_pressed(KEY_A))
 	var y := float(Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_S)) - float(Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_W))
 	return Vector2(x, y)
@@ -104,7 +126,10 @@ func _input(e: InputEvent) -> void:
 	elif e is InputEventScreenTouch:
 		if e.pressed:
 			_last[e.index] = e.position
-			_p_tap = e.position
+			if e.position.y < title_h:
+				_p_title_tap = e.position
+			else:
+				_p_tap = e.position
 		else:
 			_last.erase(e.index)
 		touching = not _last.is_empty()

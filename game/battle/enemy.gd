@@ -37,7 +37,7 @@ func _ready() -> void:
 func tex(name: String) -> Texture2D:
 	if not _tex.has(name):
 		var path := "res://art/full/%s.png" % name
-		_tex[name] = load(path) if ResourceLoader.exists(path) else load("res://art/m0/A.png")
+		_tex[name] = load(path) if ResourceLoader.exists(path) else load("res://art/full/A.png")
 	return _tex[name]
 
 
@@ -86,7 +86,7 @@ func hurt() -> void:
 	var tw := create_tween()
 	tw.tween_property(self, "shake", 0.0, 0.45)
 	await tw.finished
-	await get_tree().create_timer(0.15).timeout
+	await get_tree().create_timer(0.15, false).timeout
 	set_pose(back)
 
 

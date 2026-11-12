@@ -203,3 +203,19 @@ static func _perim_seg(ci: CanvasItem, r: Rect2, a: float, b: float, col: Color)
 ## 全屏矩形：从可见区域左上角铺满（battle 根节点有居中偏移，传入 offset = 根节点 position）
 static func screen_rect(ci: CanvasItem, offset: Vector2, col: Color) -> void:
 	ci.draw_rect(Rect2(-offset, ci.get_viewport_rect().size), col)
+
+
+## MV 的像素鼠标箭头（14 行），p 是箭尖。col 是箭身颜色：白光标（用户）描黑边，红光标（她抢走后）描白边
+const CURSOR_ROWS := ["X", "XX", "XoX", "XooX", "XoooX", "XooooX", "XoooooX", "XooooooX", "XoooXXXX", "XoXoX", "XX.XoX", "X...XoX", "....XoX", ".....XX"]
+
+
+static func cursor(ci: CanvasItem, p: Vector2, col := Color.WHITE) -> void:
+	var o := p.round()
+	var edge := C.BLACK if col == C.WHITE else C.WHITE
+	for j in CURSOR_ROWS.size():
+		var row: String = CURSOR_ROWS[j]
+		for i in row.length():
+			if row[i] == "X":
+				ci.draw_rect(Rect2(o.x + i, o.y + j, 1, 1), edge)
+			elif row[i] == "o":
+				ci.draw_rect(Rect2(o.x + i, o.y + j, 1, 1), col)
