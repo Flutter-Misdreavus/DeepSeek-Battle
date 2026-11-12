@@ -122,7 +122,7 @@ func _process(_dt: float) -> void:
 	if shake > 0.0:
 		jitter = round(shake * sin(Time.get_ticks_msec() * 0.09))
 	spr.position = Vector2(foot.x - tx.get_width() * s / 2.0 + jitter, foot.y - tx.get_height() * sc.y)
-	glow.visible = aura > 0.01
+	glow.visible = aura > 0.01 and spr.visible
 	if glow.visible:
 		var gs := sc * (1.0 + 0.035 + 0.01 * sin(Conductor.beat * PI))
 		glow.scale = gs

@@ -1,5 +1,5 @@
 extends Node2D
-## 最上层的全屏效果（在标题栏下面）：
+## 最上层的全屏效果（在标题栏下面）。绘制顺序：插图 → 黑幕 → VN 对白 → LOVE / 光标 / 红心 → 白闪
 ##   fade      黑幕透明度 0..1（fade_col 可改颜色）
 ##   flash     白闪透明度 0..1
 ##   cut-in    全屏插图（res://art/cutin/<名字>.png，按「铺满」缩放，可淡入、放大）
@@ -163,8 +163,6 @@ func _draw() -> void:
 	var off: Vector2 = get_parent().position
 	var vs := get_viewport_rect().size
 	var full := Rect2(-off, vs)
-	if vn_on:
-		_draw_vn(full)
 	if cut_tex and cut_alpha > 0.0:
 		var ts := cut_tex.get_size()
 		var s := maxf(vs.x / ts.x, vs.y / ts.y) * cut_zoom
@@ -172,6 +170,8 @@ func _draw() -> void:
 		draw_texture_rect(cut_tex, Rect2(full.get_center() - sz / 2, sz), false, Color(1, 1, 1, cut_alpha))
 	if fade > 0.0:
 		draw_rect(full, Color(fade_col, fade))
+	if vn_on:
+		_draw_vn(full)          # VN 画在插图和黑幕上面（失败画面、HP 归零时都要看得见）
 	if love_k >= 0.0:
 		Fx.love_acronym(self, love_pos, 24, love_k)
 	if cursor_pos != null:

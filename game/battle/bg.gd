@@ -48,7 +48,7 @@ func _draw() -> void:
 			_draw_grid(full)
 		"love":
 			_draw_love(full)
-	if panels and mode != "chat" and mode != "black":
+	if panels and mode != "chat":
 		_draw_panels()
 
 

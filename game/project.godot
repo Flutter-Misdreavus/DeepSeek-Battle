@@ -11,8 +11,9 @@ config_version=5
 [application]
 
 config/name="DeepSeek Battle"
-run/main_scene="res://battle/battle.tscn"
+run/main_scene="res://title/title.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
+config/icon="res://icon.png"
 run/max_fps=60
 config/quit_on_go_back=false
 

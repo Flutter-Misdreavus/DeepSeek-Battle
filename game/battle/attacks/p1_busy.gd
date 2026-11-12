@@ -113,13 +113,11 @@ func _draw() -> void:
 					3:
 						col = C.SYS_DIM
 				draw_rect(Rect2((p - Vector2(1, 1)).round(), Vector2(2, 2)), col)
-		elif t < 15.5:
+		else:
 			for k in 8:
 				var p := _burst_pos(c, j, k, burst)
-				var dot := Rect2((p - Vector2(1.5, 1.5)).round(), Vector2(3, 3))
-				# 画的部分自己裁到框内（框的裁剪层在本机没裁住子节点，见报告）
-				if box.encloses(dot):
-					draw_rect(dot, C.WHITE)
+				if box.grow(8.0).has_point(p):
+					draw_rect(Rect2((p - Vector2(1.5, 1.5)).round(), Vector2(3, 3)), C.WHITE)
 	# 横幅出现前：顶边一条闪烁的灰线，缺口处断开
 	if t >= 10.5 and t < 11.5 and int(t * 4.0) % 2 == 0:
 		var gx := _gap_x()
@@ -141,36 +139,19 @@ func _draw() -> void:
 		var x := box.position.x - scroll
 		var ty := by + 2.0
 		var ci := 0
-		# 文字自己裁到框内：只画完整的字，避免超出边框
-		if ty >= box.position.y and ty + CHAR_W <= box.end.y:
-			while x < box.end.x:
-				var ch := PHRASE[ci % PHRASE.length()]
-				# 和缺口有重叠的字、被框边切到的字都不画
-				var in_box := x >= box.position.x and x + CHAR_W <= box.end.x
-				if in_box and not (x < gx + GAP_W and x + CHAR_W > gx):
-					Px.text(self, Vector2(x, ty), ch, C.GRAY)
-				x += CHAR_W
-				ci += 1
+		while x < box.end.x:
+			var ch := PHRASE[ci % PHRASE.length()]
+			# 和缺口有重叠的字整个不画
+			if not (x < gx + GAP_W and x + CHAR_W > gx):
+				Px.text(self, Vector2(x, ty), ch, C.GRAY)
+			x += CHAR_W
+			ci += 1
 
 
-## 横幅的一段：只画落在框内的部分（框的裁剪层在本机没裁住子节点，见报告）
+## 横幅的一段：直接画，框外部分交给框的裁剪
 func _draw_banner_seg(r: Rect2) -> void:
-	var v := r.intersection(box)
-	if v.size.x <= 0.0 or v.size.y <= 0.0:
+	if r.size.x <= 0.0:
 		return
-	var x0 := roundf(v.position.x)
-	var x1 := roundf(v.end.x)
-	var y0 := roundf(v.position.y)
-	var y1 := roundf(v.end.y)
-	if x1 <= x0 or y1 <= y0:
-		return
-	draw_rect(Rect2(x0, y0, x1 - x0, y1 - y0), C.BLACK)
-	# 被框边裁掉的那条边不画，保留的边照常画 1px 白线
-	if r.position.x >= box.position.x - 0.01:
-		draw_rect(Rect2(x0, y0, 1, y1 - y0), C.WHITE)
-	if r.end.x <= box.end.x + 0.01:
-		draw_rect(Rect2(x1 - 1, y0, 1, y1 - y0), C.WHITE)
-	if r.position.y >= box.position.y - 0.01:
-		draw_rect(Rect2(x0, y0, x1 - x0, 1), C.WHITE)
-	if r.end.y <= box.end.y + 0.01:
-		draw_rect(Rect2(x0, y1 - 1, x1 - x0, 1), C.WHITE)
+	var rr := Rect2(r.position.round(), Vector2(roundf(r.size.x), BANNER_H))
+	draw_rect(rr, C.BLACK)
+	Px.frame(self, rr, 1.0, C.WHITE)

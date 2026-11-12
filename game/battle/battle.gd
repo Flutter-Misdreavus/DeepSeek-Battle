@@ -53,7 +53,7 @@ var _stop_msg := ""
 var _shards: Array = []                # 第二阶段停止按钮炸开的碎片 {p, v}
 var kill_dialog := {}                  # 「结束进程」弹窗
 var big_version := ""                  # 终局里框上方的大号版本号（空 = 不画）
-var invert := ColorRect.new()          # 终局「负片」：反色它下面的画面，红心在它上面不受影响
+var invert := ColorRect.new()          # 终局「负片」：反色它下面的整个画面；红心由 overlay.heart_pos 在上面重画，保持红色
 
 
 func _ready() -> void:
@@ -67,8 +67,8 @@ func _ready() -> void:
 	invert.material = im
 	invert.visible = false
 	invert.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.add_child(invert)
-	box.move_child(invert, soul.get_index())
+	add_child(invert)
+	move_child(invert, overlay.get_index())   # 反色盖住背景、她、框和界面（界面文字反色后仍然可读）；红心由 overlay 在上面重画
 	bubble.battle = self
 	hud.battle = self
 	overlay.battle = self
@@ -176,6 +176,8 @@ func reset_stage() -> void:
 
 func set_invert(on: bool) -> void:
 	invert.visible = on
+	if not on:
+		overlay.heart_pos = null
 	if on:
 		var vs := get_viewport_rect().size
 		invert.position = -position
@@ -745,6 +747,8 @@ func _process(dt: float) -> void:
 		if _stop_msg_t > 1.0:
 			_stop_msg_t = -1.0
 	over.queue_redraw()
+	if invert.visible:
+		overlay.heart_pos = soul.pos if soul.shown and not (soul.iframe > 0.0 and int(soul.iframe * 12.0) % 2 == 0) else null
 
 
 func _notification(what: int) -> void:
