@@ -24,6 +24,7 @@ var stop_beat := -1.0            # 「■ 停止」按钮出现的拍；-1 = dur
 var stop_spot := Vector2(-1, -1) # 「■ 停止」按钮的中心；(-1,-1) = 框内右上角
 var mirror := false              # 左右镜像（重新生成第二遍用）
 var rng := RandomNumberGenerator.new()
+var opts := {}                   # battle.run_attack 传进来的选项（比如终局的 "route": "kill" / "spare"）
 
 var hazards_r: Array[Rect2] = []
 var hazards_c: Array[Vector3] = []   # x, y, 半径

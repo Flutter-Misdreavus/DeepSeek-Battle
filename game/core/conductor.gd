@@ -118,6 +118,12 @@ func wait_beat(n := 1) -> void:
 		await get_tree().process_frame
 
 
+## 等到本段第 b 拍
+func wait_until(b: float) -> void:
+	while beat < b:
+		await get_tree().process_frame
+
+
 ## 等 b 拍
 func wait_beats(b: float) -> void:
 	var target := beat + b

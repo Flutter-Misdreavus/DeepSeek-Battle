@@ -52,6 +52,8 @@ var _stop_msg_t := -1.0
 var _stop_msg := ""
 var _shards: Array = []                # 第二阶段停止按钮炸开的碎片 {p, v}
 var kill_dialog := {}                  # 「结束进程」弹窗
+var big_version := ""                  # 终局里框上方的大号版本号（空 = 不画）
+var invert := ColorRect.new()          # 终局「负片」：反色它下面的画面，红心在它上面不受影响
 
 
 func _ready() -> void:
@@ -60,6 +62,13 @@ func _ready() -> void:
 		add_child(n)
 	box.add_child(soul)
 	soul.shown = false
+	var im := ShaderMaterial.new()
+	im.shader = preload("res://fx/invert.gdshader")
+	invert.material = im
+	invert.visible = false
+	invert.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(invert)
+	box.move_child(invert, soul.get_index())
 	bubble.battle = self
 	hud.battle = self
 	overlay.battle = self
@@ -91,6 +100,7 @@ func _main() -> void:
 	if j == "":
 		await Cutscenes.intro(self)
 		await enter_phase(1, true)
+		flavor_i = 0          # 第一回合的旁白是「* DeepSeek娘 拒绝了你的请求。」
 	else:
 		await _jump(j)
 	while true:
@@ -101,6 +111,12 @@ func _main() -> void:
 			await Cutscenes.game_over(self)
 			_abort = ""
 			_restore()
+			var fr: String = _checkpoint.get("finale_route", "")
+			if fr == "kill":
+				if await _kill_route():
+					return
+			elif fr == "spare":
+				await do_finale("spare")
 
 
 ## 一个完整回合；返回 true 表示已经演完结局
@@ -110,8 +126,7 @@ func _round() -> bool:
 		await Cutscenes.spare_ending(self)
 		return true
 	if her_hp <= 0:
-		await _kill_route()
-		return true
+		return await _kill_route()
 	var hp_phase := _phase_for_hp()
 	if hp_phase > phase:
 		await enter_phase(hp_phase)
@@ -122,12 +137,49 @@ func _round() -> bool:
 		if phase < 3:
 			await enter_phase(phase + 1)
 		else:
-			await Cutscenes.finale(self, "spare")
-			finale_done = true
-			if _abort != "":
-				return false
-			spare_ready = true
+			await do_finale("spare")
 	return false
+
+
+## 终局：先存一个检查点（失败后直接从终局重来），演完后记下状态
+func do_finale(route: String) -> void:
+	_save()
+	_checkpoint["finale_route"] = route
+	await Cutscenes.finale(self, route)
+	reset_stage()
+	if _abort != "":
+		return
+	finale_done = true
+	_checkpoint["finale_route"] = ""
+	if route == "spare":
+		spare_ready = true
+		enemy.set_idle("kneel_blue")
+	else:
+		enemy.set_idle("kneel")
+	enemy.breathing = false
+
+
+## 把终局改过的舞台恢复原样（立绘大小位置、标题栏、负片、面板、大号版本号）
+func reset_stage() -> void:
+	enemy.height = C.STAGE_H
+	enemy.foot = C.STAGE_FOOT
+	enemy.modulate = Color.WHITE
+	enemy.spr.visible = true
+	enemy.aura = 0.0
+	frame.broken = false
+	frame.cracks = 0
+	set_invert(false)
+	bg.panels = true
+	box.fill = C.BLACK
+	big_version = ""
+
+
+func set_invert(on: bool) -> void:
+	invert.visible = on
+	if on:
+		var vs := get_viewport_rect().size
+		invert.position = -position
+		invert.size = vs
 
 
 func _phase_for_hp() -> int:
@@ -161,7 +213,7 @@ func enter_phase(n: int, quick := false) -> void:
 
 
 func _save() -> void:
-	_checkpoint = {"phase": phase, "her_hp": her_hp, "lv": lv, "maxhp": maxhp, "items": items.duplicate(true), "version": version, "finale": finale_done}
+	_checkpoint = {"finale_route": "", "phase": phase, "her_hp": her_hp, "lv": lv, "maxhp": maxhp, "items": items.duplicate(true), "version": version, "finale": finale_done}
 
 
 func _restore() -> void:
@@ -177,6 +229,11 @@ func _restore() -> void:
 	next_speed = 1.0
 	soul.iframe = 0.0
 	overlay.fade = 0.0
+	reset_stage()
+	enemy.breathing = true
+	enemy.visible = true
+	hud.visible = true
+	box.visible = true
 	_sync_hud()
 	enter_phase(_checkpoint["phase"], true)
 
@@ -291,6 +348,8 @@ func do_fight(acc: float) -> void:
 	var dmg := int(round(lerpf(45.0, 110.0, pow(acc, 1.5)))) + (lv - 1) * 4
 	if acc > 0.96:
 		dmg = int(dmg * 1.2)
+	if spare_ready or finale_done:
+		dmg = her_hp          # 终局后她已经没有防御了
 	hud.slash()
 	await wait(0.22)
 	Sfx.play("hit_enemy")
@@ -398,7 +457,15 @@ func _enemy_turn() -> void:
 		spare = 2
 
 
-## 跑一个攻击（终局也用它串起几段）。opts：damage、box（覆盖弹幕框大小）、keep_box（结束后不变回文字框）
+## 跑一个攻击（终局也用它串起几段）。opts：
+##   damage      伤害（默认本阶段的值）
+##   box / rect  覆盖弹幕框大小 / 直接给内框矩形
+##   start_beat  等到配乐第几拍才开始（默认下一个整拍）
+##   max_beats   最多跑几拍（真实拍数）就截断
+##   keep_box    结束后不变回文字框、红心继续可动（终局串段用）
+##   keep_soul   开始时不把红心挪到框底（终局串段用）
+##   no_stop     不出「■ 停止」按钮
+##   其余键原样放进 atk.opts
 func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 	var path := ATTACK_DIR % id
 	if not ResourceLoader.exists(path):
@@ -411,6 +478,7 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 	atk.mirror = mirror
 	atk.damage = opts.get("damage", Story.PHASES[phase]["damage"])
 	atk.rng.seed = hash(id) + attack_i * 7919 + int(Dbg.val("seed", "0"))
+	atk.opts = opts
 	atk.setup()
 	var size: Vector2 = opts.get("box", atk.box_size)
 	var r: Rect2 = opts["rect"] if opts.has("rect") else C.dodge_box(size.x, size.y)
@@ -419,7 +487,10 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 	await box.morph(r, 0.3)
 	atk.box = r
 	soul.area = r
-	soul.pos = soul.clamp_in(Vector2(r.get_center().x, r.end.y - 20))
+	if opts.get("keep_soul", false):
+		soul.pos = soul.clamp_in(soul.pos)
+	else:
+		soul.pos = soul.clamp_in(Vector2(r.get_center().x, r.end.y - 20))
 	soul.active = true
 	soul.shown = true
 	soul.iframe = 0.0
@@ -432,11 +503,16 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 	var sb := atk.stop_beat if atk.stop_beat >= 0.0 else atk.duration * 0.5
 	var sp := atk.stop_spot if atk.stop_spot.x >= 0.0 else Vector2(r.end.x - 24, r.position.y + 14)
 	stop = {"beat": sb, "pos": sp, "on": false, "touched": false, "state": "", "t": 0.0}
-	await Conductor.wait_beat()
+	if opts.has("start_beat"):
+		await Conductor.wait_until(opts["start_beat"])
+	else:
+		await Conductor.wait_beat()
 	atk.begin()
 	var last := Conductor.beat
+	var b_start := last
+	var max_b: float = opts.get("max_beats", 1e9)
 	var stopped := false
-	while not atk.finished():
+	while not atk.finished() and Conductor.beat - b_start < max_b:
 		await get_tree().process_frame
 		if get_tree().paused:
 			last = Conductor.beat
@@ -460,7 +536,8 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 			if hp <= 0:
 				_abort = "gameover"
 				break
-	soul.active = false
+	if not opts.get("keep_box", false) or _abort != "":
+		soul.active = false
 	soul.pull = Vector2.ZERO
 	soul.tether = null
 	cur_attack = null
@@ -471,6 +548,11 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 	if _abort == "" and not opts.get("keep_box", false):
 		soul.shown = false
 		await box.morph(C.TEXT_BOX, 0.25)
+
+
+## 屏幕抖动（逻辑像素），攻击里砸地、爆炸时用
+func shake(amount: float) -> void:
+	_shake = maxf(_shake, amount)
 
 
 func hurt(d: int) -> void:
@@ -555,15 +637,13 @@ func _shards_hit(hb: Rect2) -> bool:
 # 击杀路线
 # ════════════════════════════════════════════════════════════
 
-func _kill_route() -> void:
+## 返回 true = 结局演完；false = 终局里失败了（主循环会处理重来）
+func _kill_route() -> bool:
 	if not finale_done:
 		await Cutscenes.hp_zero(self)
-		await Cutscenes.finale(self, "kill")
-		finale_done = true
+		await do_finale("kill")
 		if _abort != "":
-			return
-	enemy.set_idle("kneel")
-	enemy.breathing = false
+			return false
 	# 只剩「战斗」能按
 	while true:
 		box.morph(C.TEXT_BOX, 0.25)
@@ -578,6 +658,7 @@ func _kill_route() -> void:
 		if await kill_confirm():
 			break
 	await Cutscenes.kill_ending(self)
+	return true
 
 
 ## 「结束进程 determination.exe？」弹窗：确认返回 true
@@ -728,6 +809,9 @@ func _pause_rect(i: int) -> Rect2:
 # ════════════════════════════════════════════════════════════
 
 func _draw_over() -> void:
+	if big_version != "":
+		var w := Fx.version_w(big_version, 24)
+		Fx.version(over, big_version, Vector2(roundf(320 - w / 2), 22), C.RED, 24)
 	if cur_attack:
 		cur_attack.draw_outside(over)
 		# 框的上边框兼做进度条：已过去的部分变蓝

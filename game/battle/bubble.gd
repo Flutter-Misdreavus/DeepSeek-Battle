@@ -45,6 +45,25 @@ func say(text: String, col := C.BLACK, voice := "voice_blue") -> void:
 	on = false
 
 
+## 不等确认：打完字停留 hold 秒后自己消失（终局里用，不打断节奏）。不 await 也可以。
+func say_timed(text: String, col := C.BLACK, voice := "voice_red", hold := 1.0) -> void:
+	_lines = Px.wrap(text, C.BUBBLE_W - PAD * 2)
+	_total = 0
+	for l in _lines:
+		_total += l.length()
+	_col = col
+	_voice = voice
+	_shown = 0.0
+	_last = 0
+	_typing = true
+	on = true
+	while _shown < _total:
+		await get_tree().process_frame
+	_typing = false
+	await get_tree().create_timer(hold, false).timeout
+	on = false
+
+
 func _process(dt: float) -> void:
 	if _typing:
 		_shown = minf(_shown + dt * CPS, _total)

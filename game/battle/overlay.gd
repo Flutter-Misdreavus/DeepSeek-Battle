@@ -30,9 +30,23 @@ var _vn_typing := false
 var _vn_voice := "voice_blue"
 var _vn_last := 0
 var _half := {}
+# 画在黑幕/插图上面的东西（转场、失败用）
+var love_k := -1.0                 # ≥ 0 时在 love_pos 画「Level Of ViolencE」⇄「LOVE」（Fx.love_acronym）
+var love_pos := Vector2(320, 300)
+var cursor_pos = null              # 不为 null 时画 MV 的像素光标（箭尖位置）
+var cursor_col := C.WHITE
+var heart_pos = null               # 不为 null 时画红心（失败时：在黑幕上面碎掉）
+var heart_state := ""              # "" 完整 / "crack" 裂成两半 / "shatter" 碎片飞散
+var _heart_t := 0.0
+var _shards: Array = []
 
 
 func _process(dt: float) -> void:
+	if heart_state == "shatter":
+		_heart_t += dt
+		for sh in _shards:
+			sh["v"].y += 260.0 * dt
+			sh["p"] += sh["v"] * dt
 	if _vn_typing:
 		_vn_shown = minf(_vn_shown + dt * CPS, _vn_total)
 		var n := int(_vn_shown)
@@ -46,6 +60,26 @@ func tween(prop: String, to: float, dur: float) -> void:
 	var tw := create_tween()
 	tw.tween_property(self, prop, to, dur)
 	await tw.finished
+
+
+## 失败：红心在黑幕上裂开（0.9 秒）然后碎成 6 片落下（1.2 秒）。pos 是本场景坐标。可以 await
+func heart_break(pos: Vector2) -> void:
+	heart_pos = pos
+	heart_state = ""
+	await get_tree().create_timer(0.3, false).timeout
+	heart_state = "crack"
+	Sfx.play("heart_crack")
+	await get_tree().create_timer(0.9, false).timeout
+	heart_state = "shatter"
+	_heart_t = 0.0
+	Sfx.play("heart_shatter")
+	_shards.clear()
+	for i in 6:
+		var a := -PI * 0.15 - PI * 0.7 * i / 5.0
+		_shards.append({"p": pos, "v": Vector2(cos(a), sin(a)) * randf_range(50, 90)})
+	await get_tree().create_timer(1.2, false).timeout
+	heart_pos = null
+	heart_state = ""
 
 
 func do_flash(dur := 0.25) -> void:
@@ -138,6 +172,12 @@ func _draw() -> void:
 		draw_texture_rect(cut_tex, Rect2(full.get_center() - sz / 2, sz), false, Color(1, 1, 1, cut_alpha))
 	if fade > 0.0:
 		draw_rect(full, Color(fade_col, fade))
+	if love_k >= 0.0:
+		Fx.love_acronym(self, love_pos, 24, love_k)
+	if cursor_pos != null:
+		Px.cursor(self, cursor_pos, cursor_col)
+	if heart_pos != null:
+		_draw_heart_break()
 	if flash > 0.0:
 		draw_rect(full, Color(1, 1, 1, flash))
 
@@ -165,3 +205,24 @@ func _draw_vn(full: Rect2) -> void:
 			budget -= l.length()
 			y += C.LINE_H
 			first = false
+
+
+func _draw_heart_break() -> void:
+	var p: Vector2 = heart_pos
+	match heart_state:
+		"":
+			Px.heart(self, p)
+		"crack":
+			# 左右两半各往外错开 1px，中间一道锯齿裂缝
+			var o := (p - C.SOUL_HALF).round()
+			for j in Px.HEART_ROWS.size():
+				var row: String = Px.HEART_ROWS[j]
+				var cut := 6 + (1 if j % 2 == 0 else 0) - (1 if j % 4 == 3 else 0)
+				for i in row.length():
+					if row[i] != "X" or i == cut:
+						continue
+					var dx := -1 if i < cut else 1
+					draw_rect(Rect2(o.x + i + dx, o.y + j, 1, 1), C.HEART)
+		"shatter":
+			for sh in _shards:
+				draw_rect(Rect2(sh["p"].round() - Vector2(1, 1), Vector2(3, 3)), C.HEART)
