@@ -32,3 +32,4 @@ __pycache__/
 
 # Redundant source font (the game ships the woff2)
 assets/fonts/*.ttf
+pipeline/out/
