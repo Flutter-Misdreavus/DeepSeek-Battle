@@ -20,6 +20,7 @@ config/quit_on_go_back=false
 [autoload]
 
 Dbg="*res://core/dbg.gd"
+Settings="*res://core/settings.gd"
 Inp="*res://core/inp.gd"
 Conductor="*res://core/conductor.gd"
 Sfx="*res://core/sfx.gd"

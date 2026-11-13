@@ -544,7 +544,7 @@ func hurt(d: int) -> void:
 	soul.iframe = C.IFRAMES
 	Sfx.play("player_hurt")
 	_shake = 3.0
-	if Dbg.has("god"):
+	if Settings.invincible or Dbg.has("god"):
 		return
 	hp = maxi(0, hp - d)
 	turn_damage += d
@@ -759,7 +759,7 @@ func pause_input() -> void:
 		return
 	var d := Inp.take_dir(true)
 	if d.y != 0:
-		_pause_sel = wrapi(_pause_sel + d.y, 0, 3)
+		_pause_sel = wrapi(_pause_sel + d.y, 0, 4)
 		Sfx.play("menu_move")
 	var choose := Inp.take_ok(true)
 	if Inp.take_cancel(true) or Inp.pause or hit == "min":
@@ -769,7 +769,7 @@ func pause_input() -> void:
 	var tp = Inp.take_tap(true)
 	if tp != null:
 		var p := to_local(tp)
-		for i in 3:
+		for i in 4:
 			if _pause_rect(i).has_point(p):
 				_pause_sel = i
 				choose = true
@@ -779,14 +779,16 @@ func pause_input() -> void:
 			0:
 				set_paused(false)
 			1:
+				Settings.toggle_invincible()
+			2:
 				set_paused(false)
 				get_tree().change_scene_to_file("res://title/title.tscn" if ResourceLoader.exists("res://title/title.tscn") else "res://battle/battle.tscn")
-			2:
+			3:
 				get_tree().quit()
 
 
 func _pause_rect(i: int) -> Rect2:
-	return Rect2(250, 150 + i * 24, 140, 20)
+	return Rect2(230, 138 + i * 24, 180, 20)
 
 
 # ════════════════════════════════════════════════════════════
@@ -839,11 +841,11 @@ func draw_pause(ci: CanvasItem) -> void:
 	if not _paused:
 		return
 	Px.screen_rect(ci, position, Color(0, 0, 0, 0.75))
-	var r := Rect2(230, 120, 180, 110)
+	var r := Rect2(210, 108, 220, 144)
 	Px.panel(ci, r)
 	Px.text(ci, r.position + Vector2(12, 8), "* 已暂停")
-	var labels := ["继续", "回到标题", "退出游戏"]
-	for i in 3:
+	var labels := ["继续", Settings.invincible_label(), "回到标题", "退出游戏"]
+	for i in labels.size():
 		var pr := _pause_rect(i)
 		Px.text(ci, pr.position + Vector2(16, 2), labels[i], C.BTN_HI if i == _pause_sel else C.WHITE)
 		if i == _pause_sel:

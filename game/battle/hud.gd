@@ -202,6 +202,14 @@ func pick_option(opts: Array, cols := 2, colors := {}) -> int:
 	var result := -2
 	while result == -2:
 		await get_tree().process_frame
+		# 返回优先，不能再被同帧的确认或选项点击覆盖。
+		if Inp.take_cancel():
+			result = -1
+			break
+		var tp = Inp.take_tap()
+		if tp != null and BACK_RECT.grow(6).has_point(_local(tp)):
+			result = -1
+			break
 		var d := Inp.take_dir()
 		if d != Vector2i.ZERO:
 			var row := _opt_sel / _opt_cols
@@ -214,13 +222,8 @@ func pick_option(opts: Array, cols := 2, colors := {}) -> int:
 				Sfx.play("menu_move")
 		if Inp.take_ok():
 			result = _opt_sel
-		elif Inp.take_cancel():
-			result = -1
-		var tp = Inp.take_tap()
 		if tp != null:
 			var p := _local(tp)
-			if BACK_RECT.grow(6).has_point(p):
-				result = -1
 			for i in _opts.size():
 				if _opt_rect(i).has_point(p):
 					_opt_sel = i

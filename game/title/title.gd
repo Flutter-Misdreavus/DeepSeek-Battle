@@ -8,7 +8,7 @@ const FRAME := preload("res://battle/frame.gd")
 const MENU_X := 330.0
 const MENU_Y := 214.0
 const MENU_DY := 22.0
-const ITEM_RECT := Vector2(120, 18)
+const ITEM_RECT := Vector2(180, 18)
 
 var bg := BG.new()
 var frame := FRAME.new()
@@ -18,7 +18,7 @@ var shade := Node2D.new()
 var sel := 0
 var fade := 0.0
 var starting := false
-var _items := ["开始", "退出"]
+var _items := ["开始", "", "退出"]
 
 
 func _ready() -> void:
@@ -85,6 +85,10 @@ func _item_pos(i: int) -> Vector2:
 
 func _choose(i: int) -> void:
 	if i == 1:
+		Settings.toggle_invincible()
+		Sfx.play("menu_select")
+		return
+	if i == 2:
 		get_tree().quit()
 		return
 	starting = true
@@ -112,7 +116,7 @@ func _draw() -> void:
 	for i in _items.size():
 		var p := _item_pos(i)
 		var col := C.BTN_HI if i == sel else C.WHITE
-		Px.text(self, p, _items[i], col)
+		Px.text(self, p, Settings.invincible_label() if i == 1 else _items[i], col)
 		if i == sel:
 			Px.heart(self, p + Vector2(-12, 6))
 	var hint := "Z / Enter 确定   方向键 移动   手机：点按 / 拖动"
