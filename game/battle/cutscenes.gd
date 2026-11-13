@@ -174,8 +174,9 @@ static func hp_zero(b) -> void:
 ##   8–24  蓝屏：整个屏幕变成死机蓝屏，「:(」翻成她的「:)」，二维码的像素炸成弹幕（fin_bsod）
 ##   24–40 版本号：V16 → V256 → V4096 → V∞，前面三个阶段的招牌攻击各截 4 拍（红心 → 绿心 → 蓝心 → 红心），一次比一次快
 ##   40–56 巨鲸：一条占满屏幕的大鲸鱼游过，身边甩出螺旋的小鲸鱼（fin_giant）
-##   56–66 Ctrl+A：击杀路线留一个缺口、Delete 连按，最后一下落在重拍上；饶恕路线全选、光标停在 Delete 上，你可以伸手碰她的光标（fin_ctrl_a）
-##   66–   她跪下（do_finale 收尾）
+##   56–72 鲸吞：巨鲸冲向镜头把弹幕框一口吞下；在它肚子里躲「ERROR」磷虾，肚子一拍一拍地收缩，最后把你吐出来（fin_swallow）
+##   72–82 Ctrl+A：击杀路线留一个缺口、Delete 连按，最后一下落在重拍上；饶恕路线全选、光标停在 Delete 上，你可以伸手碰她的光标（fin_ctrl_a）
+##   82–   她跪下（do_finale 收尾）
 const FULL := Rect2(10, 20, 620, 260)
 const MEDLEY := [["p1_moe", 1.25, "V16"], ["p2_reject", 1.25, "V256"], ["p3_window", 1.25, "V4096"], ["p2_school", 1.5, "V∞"]]
 
@@ -228,8 +229,12 @@ static func finale(b, route: String) -> void:
 	await b.run_attack("fin_giant", 1.0, false, {"rect": FULL, "start_beat": 40.0, "max_beats": 16.0, "keep_box": true, "keep_soul": true, "no_stop": true, "damage": 5, "route": route})
 	if b._abort != "":
 		return
-	# 56–66 Ctrl+A
-	await b.run_attack("fin_ctrl_a", 1.0, false, {"rect": FULL, "start_beat": 56.0, "keep_soul": true, "no_stop": true, "damage": 6, "route": route})
+	# 56–72 鲸吞
+	await b.run_attack("fin_swallow", 1.0, false, {"rect": FULL, "start_beat": 56.0, "max_beats": 16.0, "keep_box": true, "keep_soul": true, "no_stop": true, "damage": 5, "route": route})
+	if b._abort != "":
+		return
+	# 72–82 Ctrl+A
+	await b.run_attack("fin_ctrl_a", 1.0, false, {"rect": FULL, "start_beat": 72.0, "keep_soul": true, "no_stop": true, "damage": 6, "route": route})
 	if b._abort != "":
 		return
 	b.soul.active = false
