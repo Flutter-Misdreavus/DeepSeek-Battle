@@ -13,7 +13,7 @@ const CELL := 12
 var mode := "grid"
 var spread := 0.0
 var panels := true
-var params := {"temperature": "0.0", "LOVE": "0%", "version": "V4096"}
+var params := {"temperature": "0.0", "version": "V4096"}
 var _log: Array = []                 # [{t: String, c: Color}]
 var _embers: Array = []
 var _t := 0.0
@@ -109,5 +109,5 @@ func _draw_panels() -> void:
 	Px.text(self, C.PANEL_R.position + Vector2(6, 4), "参数", head)
 	y = C.PANEL_R.position.y + 22
 	for k in params:
-		Px.text(self, Vector2(C.PANEL_R.position.x + 6, y), "%s  %s" % [k, params[k]], edge if k != "LOVE" else head)
+		Px.text(self, Vector2(C.PANEL_R.position.x + 6, y), "%s  %s" % [k, params[k]], edge)
 		y += 14

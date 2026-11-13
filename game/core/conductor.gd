@@ -2,11 +2,13 @@ extends Node
 ## 节拍时钟和配乐（自动加载 Conductor）。
 ## 配乐段在 res://audio/music/<名字>.wav，参数在 sections.json（pipeline/cut_music.py 生成）。
 ## beat：当前段落从第一个整拍算起的拍数（连续的小数，循环段会一直累加，不会跳回 0）。
+## spb：当前段落一拍的秒数。每段可以有自己的速度（sections.json 里每段的 "bpm"，没写就用文件顶层的 "spb"）。
 ## 时钟平时按帧时间累加，有真实音频输出时再慢慢对齐到播放位置，所以静音、无界面运行也能走。
 
 signal section_changed(name: String)
 
 var beat := 0.0
+var spb := C.SPB
 var section := ""
 var looped := false
 var _t := 0.0                     # 本段从 clip 开头算起的秒数（不回绕）
@@ -14,6 +16,7 @@ var _first := 0.0                 # clip 里第一个整拍的秒数
 var _len := 0.0                   # clip 长度（秒）
 var _playing := false
 var _sections := {}
+var _spb_default := C.SPB
 var _player: AudioStreamPlayer
 var _bus := 0
 var _lowpass: AudioEffectLowPassFilter
@@ -36,7 +39,9 @@ func _ready() -> void:
 	_audio_ok = AudioServer.get_driver_name() != "Dummy"
 	var f := FileAccess.open("res://audio/music/sections.json", FileAccess.READ)
 	if f:
-		_sections = JSON.parse_string(f.get_as_text()).get("sections", {})
+		var j: Dictionary = JSON.parse_string(f.get_as_text())
+		_sections = j.get("sections", {})
+		_spb_default = j.get("spb", C.SPB)
 	else:
 		push_warning("Conductor: 没有 sections.json，配乐不可用，只走节拍时钟")
 	if Dbg.has("mute"):
@@ -50,7 +55,8 @@ func play(name: String, from_beat := 0.0) -> void:
 	looped = s.get("loop", true)
 	_first = s.get("first_beat_in_clip", 0.0)
 	_len = s.get("length_sec", 0.0)
-	_t = _first + from_beat * C.SPB
+	spb = 60.0 / float(s["bpm"]) if s.has("bpm") else _spb_default
+	_t = _first + from_beat * spb
 	_playing = true
 	var path := "res://audio/music/%s.wav" % name
 	if not s.is_empty() and ResourceLoader.exists(path):
@@ -66,8 +72,8 @@ func play(name: String, from_beat := 0.0) -> void:
 	else:
 		_player.stop()
 		if _len <= 0.0:
-			_len = 64 * C.SPB
-	beat = (_t - _first) / C.SPB
+			_len = 64 * spb
+	beat = (_t - _first) / spb
 	section_changed.emit(name)
 
 
@@ -108,7 +114,7 @@ func _process(dt: float) -> void:
 			_t = pos
 		else:
 			_t += err * 0.1
-	beat = (_t - _first) / C.SPB
+	beat = (_t - _first) / spb
 
 
 ## 等到下一个整拍（或下第 n 个整拍）

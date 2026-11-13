@@ -2,7 +2,7 @@ class_name C
 ## 全局常量：配色、布局（640×360 逻辑像素）、节拍。所有攻击和界面都从这里取数，不要在别处写死同样的值。
 
 const BASE := Vector2(640, 360)
-const SPB := 60.0 / 98.0               # 一拍的秒数（98 BPM）
+const SPB := 60.0 / 98.0               # 默认一拍的秒数；实际以 Conductor.spb 为准（每段配乐速度不同）
 
 # ── 配色（沿用 MV 的 palette.ts）──────────────────────────────
 const BLACK := Color("#000000")
@@ -45,7 +45,7 @@ const SOUL_HALF := Vector2(6.5, 6)
 
 # ── 数值 ──────────────────────────────────────────────────────
 const ENEMY_HP := 1200
-const PLAYER_HP := 20                  # LV 1 的最大 HP；每升一级 +4
+const PLAYER_HP := 20                  # 最大 HP（玩家固定 LV 1，不升级）
 
 
 static func btn_rect(i: int) -> Rect2:

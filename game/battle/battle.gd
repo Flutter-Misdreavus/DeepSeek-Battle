@@ -22,7 +22,6 @@ var pause_ui := preload("res://battle/pause_node.gd").new()
 # ── 战斗状态 ──
 var phase := 1
 var her_hp := C.ENEMY_HP
-var lv := 1
 var maxhp := C.PLAYER_HP
 var hp := C.PLAYER_HP
 var items: Array = []
@@ -62,6 +61,9 @@ func _ready() -> void:
 		add_child(n)
 	box.add_child(soul)
 	soul.shown = false
+	soul.slammed.connect(func() -> void:
+		shake(4.0)
+		Sfx.play("slam"))
 	var im := ShaderMaterial.new()
 	im.shader = preload("res://fx/invert.gdshader")
 	invert.material = im
@@ -215,13 +217,11 @@ func enter_phase(n: int, quick := false) -> void:
 
 
 func _save() -> void:
-	_checkpoint = {"finale_route": "", "phase": phase, "her_hp": her_hp, "lv": lv, "maxhp": maxhp, "items": items.duplicate(true), "version": version, "finale": finale_done}
+	_checkpoint = {"finale_route": "", "phase": phase, "her_hp": her_hp, "items": items.duplicate(true), "version": version, "finale": finale_done}
 
 
 func _restore() -> void:
 	her_hp = _checkpoint["her_hp"]
-	lv = _checkpoint["lv"]
-	maxhp = _checkpoint["maxhp"]
 	hp = maxhp
 	items = _checkpoint["items"].duplicate(true)
 	version = _checkpoint["version"]
@@ -241,10 +241,8 @@ func _restore() -> void:
 
 
 func _sync_hud() -> void:
-	hud.lv = lv
 	hud.hp = hp
 	hud.maxhp = maxhp
-	bg.params["LOVE"] = "%d%%" % mini(100, (lv - 1) * 8)
 	bg.params["version"] = "V%d" % version
 
 
@@ -347,7 +345,7 @@ func do_fight(acc: float) -> void:
 		hud.show_damage(-1, her_hp, her_hp, C.ENEMY_HP)
 		await wait(1.0)
 		return
-	var dmg := int(round(lerpf(45.0, 110.0, pow(acc, 1.5)))) + (lv - 1) * 4
+	var dmg := int(round(lerpf(45.0, 110.0, pow(acc, 1.5))))
 	if acc > 0.96:
 		dmg = int(dmg * 1.2)
 	if spare_ready or finale_done:
@@ -361,18 +359,12 @@ func do_fight(acc: float) -> void:
 	hud.show_damage(dmg, before, her_hp, C.ENEMY_HP)
 	await wait(1.3)
 	hits_landed += 1
-	lv += 1
-	maxhp += 4
-	hp = mini(hp + 4, maxhp)
-	_sync_hud()
-	Sfx.play("levelup")
-	bg.log("[WARN] LOVE +1   LV %d" % lv, C.RED)
+	bg.log("[WARN] 命中  -%d" % dmg, C.RED)
 	if spare > 0:
 		bg.log("[INFO] 信任 已清零", C.SYS_DIM)
 	spare = 0
 	if her_hp > 0:
 		event_line = Story.HIT_LINE[phase]
-		await hud.type_text("* 你的 LV 上升了。", C.WHITE)
 
 
 func do_act(id: String, name: String) -> void:
@@ -493,6 +485,10 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 		soul.pos = soul.clamp_in(soul.pos)
 	else:
 		soul.pos = soul.clamp_in(Vector2(r.get_center().x, r.end.y - 20))
+	soul.set_mode(atk.soul_mode)
+	if atk.soul_mode == "green":
+		soul.pos = r.get_center()
+		soul.shield_dir = Vector2i(0, -1)
 	soul.active = true
 	soul.shown = true
 	soul.iframe = 0.0
@@ -527,7 +523,7 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 		atk.clear_hazards()
 		atk.tick(db * atk.speed)
 		atk.queue_redraw()
-		if not opts.get("no_stop", false):
+		if not opts.get("no_stop", false) and not atk.no_stop:
 			stopped = _stop_update(atk, db)
 		_shards_update(db)
 		if stopped:
@@ -540,6 +536,7 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 				break
 	if not opts.get("keep_box", false) or _abort != "":
 		soul.active = false
+		soul.set_mode("red", true)
 	soul.pull = Vector2.ZERO
 	soul.tether = null
 	cur_attack = null
@@ -624,7 +621,7 @@ func _stop_update(atk: Attack, db: float) -> bool:
 
 func _shards_update(db: float) -> void:
 	for s in _shards:
-		s["p"] += s["v"] * db * C.SPB
+		s["p"] += s["v"] * db * Conductor.spb
 	_shards = _shards.filter(func(s): return box.rect.grow(10).has_point(s["p"]))
 
 

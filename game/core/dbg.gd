@@ -10,10 +10,14 @@ extends Node
 ##   --quit-at=<帧>      到这一帧退出
 ##   --speed=<倍数>      时间倍速（Engine.time_scale）
 ##   --seed=<整数>       随机种子
+##   --keys=<帧:键[:按住帧数],...>  在指定帧模拟按键（键：z x left right up down esc；默认按住 2 帧），测试真实输入路径用
 
 var args := {}
 var frame := 0
 var _shot_at := {}
+var _keys := {}                  # 帧 -> 键名（按下）
+var _key_up := {}                # 帧 -> 键名（松开）
+const KEYMAP := {"z": KEY_Z, "x": KEY_X, "left": KEY_LEFT, "right": KEY_RIGHT, "up": KEY_UP, "down": KEY_DOWN, "esc": KEY_ESCAPE}
 
 
 func _ready() -> void:
@@ -24,6 +28,10 @@ func _ready() -> void:
 		args[kv[0]] = kv[1] if kv.size() > 1 else ""
 	for s in str(args.get("shot-at", "")).split(",", false):
 		_shot_at[int(s)] = true
+	for kv in str(args.get("keys", "")).split(",", false):
+		var p := kv.split(":")
+		_keys[int(p[0])] = p[1]
+		_key_up[int(p[0]) + (int(p[2]) if p.size() > 2 else 2)] = p[1]
 	if args.has("speed"):
 		Engine.time_scale = float(args["speed"])
 	if args.has("shots"):
@@ -40,6 +48,10 @@ func val(k: String, def := "") -> String:
 
 func _process(_dt: float) -> void:
 	frame += 1
+	if _keys.has(frame):
+		_press(KEYMAP.get(_keys[frame], KEY_Z), true)
+	if _key_up.has(frame):
+		_press(KEYMAP.get(_key_up[frame], KEY_Z), false)
 	if args.has("shots"):
 		var every := int(args.get("shot-every", "0"))
 		if _shot_at.has(frame) or (every > 0 and frame % every == 0):
@@ -60,3 +72,11 @@ func shot(name: String) -> void:
 ## 打一行日志（安卓上在 logcat 的 godot 标签下）
 func log(s: String) -> void:
 	print("[dbg %05d] %s" % [frame, s])
+
+
+func _press(k: int, down: bool) -> void:
+	var e := InputEventKey.new()
+	e.keycode = k
+	e.physical_keycode = k
+	e.pressed = down
+	Input.parse_input_event(e)

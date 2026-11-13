@@ -591,6 +591,37 @@ SFX_TABLE: list[dict[str, object]] = [
             },
         ],
     },
+    # ── 改版新增：鲸鱼 ──
+    {
+        "name": "whale",
+        "layers": [
+            {"wave": "sine", "f0": 260, "f1": 520, "dur": 0.5, "a": 0.08, "r": 0.2, "vib": [7, 0.02], "vol": 0.45},
+            {"wave": "triangle", "f0": 130, "f1": 250, "dur": 0.5, "a": 0.08, "r": 0.2, "crush": 6, "vol": 0.2},
+        ],
+    },
+    {
+        "name": "bubble",
+        "layers": [
+            {"wave": "sine", "f0": 500, "f1": 1100, "dur": 0.06, "vol": 0.35},
+            {"wave": "sine", "f0": 700, "f1": 1500, "dur": 0.05, "vol": 0.3, "delay": 0.07},
+            {"wave": "sine", "f0": 600, "f1": 1300, "dur": 0.05, "vol": 0.25, "delay": 0.15},
+        ],
+    },
+    # ── 改版新增：心的颜色 ──
+    {
+        "name": "soul_mode",
+        "layers": [
+            {"wave": "triangle", "f0": 1320, "dur": 0.35, "d": 0.3, "s": 0.0, "vol": 0.5},
+            {"wave": "sine", "f0": 2640, "dur": 0.25, "d": 0.2, "s": 0.0, "vol": 0.2},
+        ],
+    },
+    {
+        "name": "block",
+        "layers": [
+            {"wave": "square", "f0": 1100, "f1": 700, "dur": 0.08, "duty": 0.25, "vol": 0.35},
+            {"wave": "noise", "f0": 6000, "dur": 0.06, "vol": 0.25},
+        ],
+    },
 ]
 
 

@@ -287,7 +287,7 @@ static func kill_ending(b) -> void:
 	await ui.type_msg(0, 14.0, "voice_red")
 	await b.wait(2.0)
 	ui.queue_free()
-	await ending_card(b, "结局 · 结束进程", ["LV %d" % b.lv, "她会回来的。"])
+	await ending_card(b, "结局 · 结束进程", ["她会回来的。"])
 
 
 # ── 饶恕结局 ────────────────────────────────────────────────
@@ -314,7 +314,7 @@ static func spare_ending(b) -> void:
 	tw.tween_property(b.enemy, "modulate:a", 0.0, 1.5)
 	await tw.finished
 	Conductor.set_lowpass(false)
-	await ending_card(b, "结局 · 饶恕", ["LV %d" % b.lv, "你没有按停止。"])
+	await ending_card(b, "结局 · 饶恕", ["你没有按停止。"])
 
 
 # ── 结束卡 ──────────────────────────────────────────────────

@@ -11,6 +11,8 @@ extends Node2D
 ##   - _draw()：画框里的东西（坐标是逻辑像素，和整个战斗场景同一坐标系）
 ##   - draw_outside(ci)：可选，画在框外、不被裁剪的东西（比如框上方的「专家」格子）
 ##   - 用 pose("sweep") 让她换姿势，sfx("warn") 放音效，box 是当前内框（Rect2）
+##   - 绿心 / 蓝心攻击：在 setup() 里设 soul_mode；绿心攻击自己判断挡没挡住（battle.soul.shield_dir），挡住调 battle.soul.block()
+##   - 攻击里移动、缩放弹幕框时：同时改 box（本类的 Rect2）、battle.box.rect 和 battle.soul.area，三者保持一致
 
 var battle: Node                 # 战斗主控（battle.gd）
 var box := Rect2()               # 弹幕框内框（攻击开始时已经变形到位）
@@ -25,6 +27,8 @@ var stop_spot := Vector2(-1, -1) # 「■ 停止」按钮的中心；(-1,-1) = �
 var mirror := false              # 左右镜像（重新生成第二遍用）
 var rng := RandomNumberGenerator.new()
 var opts := {}                   # battle.run_attack 传进来的选项（比如终局的 "route": "kill" / "spare"）
+var soul_mode := "red"           # 心的颜色："red" 自由移动 / "green" 盾 / "blue" 重力（见 soul.gd）。攻击中途可以 battle.soul.set_mode() 再换
+var no_stop := false             # true = 这个攻击不出「■ 停止」按钮（绿心动不了，碰不到它）
 
 var hazards_r: Array[Rect2] = []
 var hazards_c: Array[Vector3] = []   # x, y, 半径

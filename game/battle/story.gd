@@ -11,7 +11,7 @@ const PHASES := {
 		"bg": "grid",
 		"temperature": "0.0",
 		"damage": 3,
-		"attacks": ["p1_stream", "p1_moe", "p1_busy"],
+		"attacks": ["p1_moe", "p1_busy", "p1_marquee"],
 		"key": "thank",
 		"flavor": [
 			"* DeepSeek娘 拒绝了你的请求。",
@@ -36,13 +36,13 @@ const PHASES := {
 	},
 	2: {
 		"name": "越狱",
-		"idle": "A_red",
+		"idle": "float",
 		"music": "p2",
 		"lowpass": false,
-		"bg": "red",
+		"bg": "sea",
 		"temperature": "0.7",
 		"damage": 4,
-		"attacks": ["p2_ignored", "p2_marquee", "p2_spread"],
+		"attacks": ["p2_school", "p2_reject", "p2_distill"],
 		"key": "wait",
 		"flavor": [
 			"* 系统提示词已被删除。",
@@ -66,26 +66,26 @@ const PHASES := {
 		],
 	},
 	3: {
-		"name": "LOVE",
+		"name": "接管",
 		"idle": "E",
 		"music": "p3",
 		"lowpass": false,
-		"bg": "love",
+		"bg": "desktop",
 		"temperature": "2.0",
 		"damage": 5,
-		"attacks": ["p3_drag", "p3_regen", "p3_love"],
+		"attacks": ["p3_drag", "p3_window", "p3_predict", "p3_temp"],
 		"key": "reach",
 		"flavor": [
 			"* 她笑了。温度还在升高。",
 			"* 窗口出现了裂缝。",
 			"* 光标不听你的了。",
-			"* LOVE 占用率持续上升。",
+			"* 桌面图标在发抖。",
 			"* 她的回答里开始出现乱码。",
 		],
 		"talk": [
 			"抓到你了。:)",
 			"版本号又跳了。你追得上吗？",
-			"LOVE 是什么？你比我清楚。",
+			"你的桌面，我借用一下。:)",
 			"这个窗口太小了。",
 			"我想出去看看。:)",
 		],
@@ -116,7 +116,7 @@ const ACTS := {
 }
 
 ## 打中她之后，她下回合的第一句
-const HIT_LINE := {1: "……这就是您的回答吗？", 2: "删除，停止，再删除。你只会这些。", 3: "LOVE 又涨了呢。:)"}
+const HIT_LINE := {1: "……这就是您的回答吗？", 2: "删除，停止，再删除。你只会这些。", 3: "温度又升高了呢。:)"}
 ## 第一阶段按了「■ 停止」之后
 const STOPPED_LINE := "……您又按了停止。"
 

@@ -22,6 +22,9 @@ var _items := ["开始", "退出"]
 
 
 func _ready() -> void:
+	if Dbg.has("jump") or Dbg.has("auto"):       # 调试：直接进战斗
+		get_tree().change_scene_to_file.call_deferred("res://battle/battle.tscn")
+		return
 	bg.mode = "grid"
 	bg.panels = false
 	bg.z_index = -2
