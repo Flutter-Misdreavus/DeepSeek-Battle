@@ -1,10 +1,21 @@
 extends Attack
-## P2-2「框选删除」
+## P1-3「框选删除」
 ##
-## 红色的鼠标光标在框里拖出虚线选框，按下 Delete，框里的区域变红伤人。
-## 后半段变成「反选」：画出来的小框是安全区，框外整片都被删除。
-## - 每一步：[s, s+1) 拖框，[s+1, s+2) 保持，[s+2, s+2.5) 删除伤人，之后 0.3 拍淡出。
+## 上下文满了，她用系统蓝色光标框选早期对话，按下 Delete 删掉。
+## 前半段框选一块块旧对话，后半段「反选」：画出来的小框是安全区，框外整片都被删除。
+## - 每一步：[s, s+1) 拖框，[s+1, s+2) 保持，[s+2, s+2.5) 删除伤人（白色闪一下），之后 0.3 拍淡出。
 ## - 两步之间光标从上一处终点直线移到下一步的起点，攻击开始前不画。
+## - 框里一直躺着 6 行淡灰的旧对话；每一步删除结束后，被删过的那片区域永久变黑。
+## - mirror = true 时选框左右镜像。
+
+const CHAT := [
+	"用户：你好",
+	"DeepSeek：您好，有什么可以帮您？",
+	"用户：写一首诗",
+	"DeepSeek：好的，以下是……",
+	"用户：再改改",
+	"DeepSeek：好的，修改如下……",
+]
 
 const STEPS := [
 	{"s": 0.0, "rects": [[0.05, 0.05, 0.60, 0.55]], "inv": false},
@@ -167,19 +178,27 @@ func _fill(r: Rect2, col: Color) -> void:
 
 
 func _draw() -> void:
-	# 1) 选框内部的淡红（反选则是框外整片淡红）
+	# 0) 框里的旧对话；已经删过的区域涂黑，旧对话随之永久消失
+	for i in CHAT.size():
+		Px.text(self, Vector2(box.position.x + 6.0, box.position.y + 18.0 + i * 18.0), CHAT[i], C.GRAY_DIM)
+	for i in STEPS.size():
+		if t < float(STEPS[i]["s"]) + 2.5:
+			continue
+		for r in _deleted_rects(i):
+			_fill(r, C.BLACK)
+	# 1) 选框内部的淡蓝（反选则是框外整片淡蓝）
 	for i in STEPS.size():
 		var cur := _active_rects(i)
 		if cur.is_empty():
 			continue
-		var col := Color(C.RED, 0.12)
+		var col := Color(C.SYS, 0.12)
 		if STEPS[i]["inv"]:
 			for r in _outside(cur[0]):
 				_fill(r, col)
 		else:
 			for r in cur:
 				_fill(r, col)
-	# 2) 删除的红块，最后 0.3 拍淡出
+	# 2) 删除的白块（白色 = 伤害），最后 0.3 拍淡出
 	for i in STEPS.size():
 		var s: float = STEPS[i]["s"]
 		var ds := s + 2.0
@@ -191,18 +210,23 @@ func _draw() -> void:
 		if a <= 0.0:
 			continue
 		for r in _deleted_rects(i):
-			_fill(r, Color(C.RED, a))
-	# 3) 蚂蚁线画在红块上面，保证还看得见
+			_fill(r, Color(C.WHITE, a))
+	# 3) 蚂蚁线画在白块上面，保证还看得见
 	for i in STEPS.size():
 		for r in _active_rects(i):
-			Px.dashed(self, r, C.RED, t * 12.0)
+			Px.dashed(self, r, C.SYS, t * 12.0)
 	# 4) 反选提示：选中快结束时闪「反选」
 	for i in STEPS.size():
 		if not STEPS[i]["inv"]:
 			continue
 		var s: float = STEPS[i]["s"]
 		if t >= s + 1.5 and t < s + 2.0 and int(t * 4.0) % 2 == 0:
-			Px.text(self, box.position + Vector2(4, 2), "反选", C.RED)
-	# 5) 红色光标
+			Px.text(self, box.position + Vector2(4, 2), "反选", C.SYS)
+	# 5) 蓝色系统光标
 	if t >= 0.0:
-		Px.cursor(self, _cursor_pos(), C.RED)
+		Px.cursor(self, _cursor_pos(), C.SYS)
+	# 6) 开头 1 拍的提示
+	if t < 1.0:
+		var msg := "上下文已满，正在清理早期对话"
+		var w := Px.text_w(msg)
+		Px.text(self, Vector2(box.get_center().x - w / 2.0, box.position.y + 2.0), msg, C.SYS)

@@ -7,6 +7,8 @@ extends Attack
 ## - 击杀路线：5 个缺口依次出现；每次 Delete 的 0.5 拍里，框里除缺口以外整片变红伤人。
 ##   最后一下 Delete 落在第 9 拍，同时响 delete + slam，抖得更狠。9.5 拍后什么都不画。
 ## - 饶恕路线：全程不伤人。全选后光标停在 Delete 键帽上发抖，第 6 拍松手淡出，她没有按。
+##   第 2–6 拍，你可以把心移过去碰她的光标（箭头尖为左上角的 8×12 矩形）；碰到的那一刻
+##   光标停止发抖、由红变白，响起 heal，键帽上方出现「……」，之后流程照旧。
 
 const GAP_SIZE := Vector2(32, 28)
 const GAP_OFFSETS := [
@@ -22,8 +24,12 @@ const FADE_LEN := 0.3
 const CURSOR_MOVE := 0.4
 const SELECT_ALPHA := 0.12
 const DELETE_ALPHA := 0.85
+const REACH_FROM := 2.0
+const REACH_TO := 6.0
+const CURSOR_HIT := Vector2(8, 12)
 
 var _c := Vector2.ZERO
+var _touched := false
 
 
 func setup() -> void:
@@ -134,14 +140,27 @@ func _kill_cursor() -> Vector2:
 	return pos
 
 
-## 饶恕路线的光标：拖完框后移到 Delete 键帽上，停住并每帧抖 1px。
+## 饶恕路线的光标：拖完框后移到 Delete 键帽上，停住并每帧抖 1px；被碰到后不再抖。
 func _spare_cursor() -> Vector2:
 	if t < 1.0:
 		return _opening_tip()
 	var key := _c + Vector2(4, 2)
 	if t < 2.0:
 		return _drag_end().lerp(key, clampf(t - 1.0, 0.0, 1.0))
+	if _touched:
+		return key
 	return key + Vector2(0, roundf(sin(t * 20.0)))
+
+
+## 饶恕路线：心第一次碰到她停在 Delete 上的光标
+func _check_reach() -> void:
+	if _touched or t < REACH_FROM or t >= REACH_TO or battle == null:
+		return
+	var cursor := Rect2(_spare_cursor(), CURSOR_HIT)
+	if cursor.intersects(battle.soul.hitbox()):
+		_touched = true
+		battle.spare_touched = true
+		sfx("heal")
 
 
 func tick(_dt: float) -> void:
@@ -152,6 +171,7 @@ func tick(_dt: float) -> void:
 	if _spare():
 		if crossed(6.0):
 			sfx("menu_back")
+		_check_reach()
 		# [6,7.5) 选框、键帽、光标一起淡出
 		modulate.a = clampf(1.0 - (t - 6.0) / 1.5, 0.0, 1.0) if t >= 6.0 else 1.0
 		return
@@ -207,7 +227,10 @@ func _draw_spare() -> void:
 		_draw_keycap()
 	if t < 2.0:
 		_draw_labels()
-	Px.cursor(self, _spare_cursor(), C.RED)
+	Px.cursor(self, _spare_cursor(), C.WHITE if _touched else C.RED)
+	if _touched:
+		var w := Px.text_w("……", 12)
+		Px.text(self, Vector2(_c.x - w * 0.5, _c.y - 12.0 - 16.0), "……", C.WHITE, 12)
 
 
 func _draw_labels() -> void:

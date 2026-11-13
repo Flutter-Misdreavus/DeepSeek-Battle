@@ -66,14 +66,14 @@ const PHASES := {
 		],
 	},
 	3: {
-		"name": "接管",
+		"name": "失控",
 		"idle": "E",
 		"music": "p3",
 		"lowpass": false,
 		"bg": "desktop",
 		"temperature": "2.0",
 		"damage": 5,
-		"attacks": ["p3_drag", "p3_window", "p3_predict", "p3_temp"],
+		"attacks": ["p3_snake", "p3_window", "p3_temp", "p3_infinite"],
 		"key": "reach",
 		"flavor": [
 			"* 她笑了。温度还在升高。",
