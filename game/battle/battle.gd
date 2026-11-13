@@ -493,6 +493,7 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 	var b_start := last
 	var max_b: float = opts.get("max_beats", 1e9)
 	var stopped := false
+	var first := true
 	while not atk.finished() and Conductor.beat - b_start < max_b:
 		await get_tree().process_frame
 		if get_tree().paused:
@@ -501,7 +502,8 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 		var b := Conductor.beat
 		var db := clampf(b - last, 0.0, 0.5)
 		last = b
-		atk.prev_t = atk.t
+		atk.prev_t = -0.001 if first else atk.t           # 第一帧从 -0.001 起算，crossed(0) 才会触发（只触发一次）
+		first = false
 		atk.t += db * atk.speed
 		atk.clear_hazards()
 		atk.tick(db * atk.speed)
