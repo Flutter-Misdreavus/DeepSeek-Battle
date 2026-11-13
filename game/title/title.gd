@@ -1,9 +1,8 @@
 extends Node2D
-## 标题画面：grid 背景 + 标题栏 + 左侧她的胸像 + 右侧标题与菜单。
+## 标题画面：grid 背景 + 左侧她的胸像 + 右侧标题与菜单。
 ## 逻辑坐标 640×360；根节点像 battle 一样在视口里居中。
 
 const BG := preload("res://battle/bg.gd")
-const FRAME := preload("res://battle/frame.gd")
 
 const MENU_X := 330.0
 const MENU_Y := 214.0
@@ -11,7 +10,6 @@ const MENU_DY := 22.0
 const ITEM_RECT := Vector2(180, 18)
 
 var bg := BG.new()
-var frame := FRAME.new()
 var bust := Sprite2D.new()
 var shade := Node2D.new()
 
@@ -22,7 +20,13 @@ var _items := ["开始", "", "退出"]
 
 
 func _ready() -> void:
-	if Dbg.has("jump") or Dbg.has("auto"):       # 调试：直接进战斗
+	Inp.clear_confirm()
+	Inp.pause_rect = Rect2()
+	if Dbg.start_battle_on_launch():       # 调试：直接进战斗
+		# 这些节点已在成员初始化时创建，也须交给场景管理以便正常释放。
+		for node in [bg, bust, shade]:
+			add_child(node)
+		starting = true
 		get_tree().change_scene_to_file.call_deferred("res://battle/battle.tscn")
 		return
 	bg.mode = "grid"
@@ -38,9 +42,6 @@ func _ready() -> void:
 	var s := 300.0 / float(tex.get_height())
 	bust.scale = Vector2(s, s)
 	add_child(bust)
-	frame.title = "determination.exe"
-	frame.z_index = 10
-	add_child(frame)
 	shade.z_index = 100
 	shade.draw.connect(_draw_shade)
 	add_child(shade)
@@ -51,7 +52,6 @@ func _ready() -> void:
 
 func _layout() -> void:
 	position = ((get_viewport_rect().size - C.BASE) / 2).floor()
-	Inp.title_h = position.y + C.TITLE_H
 
 
 func _process(_dt: float) -> void:

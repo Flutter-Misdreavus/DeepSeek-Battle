@@ -12,9 +12,7 @@ var dir := Vector2i.ZERO          # 本帧刚按下的方向（菜单用）
 var tap = null                    # 本帧的点按位置（视口坐标），没有则 null
 var drag := Vector2.ZERO          # 本帧触屏拖动位移（视口坐标）
 var touching := false
-var title_h := 14.0                # 视口坐标里标题栏的下沿（battle 设置）；点在这上面的算标题栏点按
-var title_tap = null
-var _p_title_tap = null
+var pause_rect := Rect2()         # 战斗暂停按钮的视口范围；标题页为空
 var locked := false               # 暂停菜单打开时为 true：普通读取一律读不到，只有 force = true 能读
 
 var _p_ok := false
@@ -39,7 +37,6 @@ func _process(_dt: float) -> void:
 	pause = _p_pause
 	dir = _p_dir
 	tap = _p_tap
-	title_tap = _p_title_tap
 	drag = _p_drag
 	_p_ok = false
 	_p_advance = false
@@ -47,14 +44,17 @@ func _process(_dt: float) -> void:
 	_p_pause = false
 	_p_dir = Vector2i.ZERO
 	_p_tap = null
-	_p_title_tap = null
 	_p_drag = Vector2.ZERO
 
 
-func take_title_tap():
-	var v = title_tap
-	title_tap = null
-	return v
+## 场景切换时清空当前及待处理的确认，避免一次输入同时离开结局又开始新游戏。
+func clear_confirm() -> void:
+	ok = false
+	advance = false
+	tap = null
+	_p_ok = false
+	_p_advance = false
+	_p_tap = null
 
 
 func take_ok(force := false) -> bool:
@@ -145,8 +145,8 @@ func _input(e: InputEvent) -> void:
 	elif e is InputEventScreenTouch:
 		if e.pressed:
 			_last[e.index] = e.position
-			if e.position.y < title_h:
-				_p_title_tap = e.position
+			if pause_rect.has_point(e.position):
+				_p_pause = true
 			else:
 				_p_tap = e.position
 		else:

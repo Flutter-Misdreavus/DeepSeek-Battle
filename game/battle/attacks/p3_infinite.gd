@@ -55,9 +55,9 @@ func setup() -> void:
 	_vis = Rect2(-battle.position, battle.get_viewport_rect().size)
 	_full = Rect2(
 		_vis.position.x + 4.0,
-		_vis.position.y + C.TITLE_H + 4.0,
+		_vis.position.y + 4.0,
 		_vis.size.x - 8.0,
-		_vis.size.y - C.TITLE_H - 8.0
+		_vis.size.y - 8.0
 	)
 	_rain_rows = int(ceil((RAIN_END - RAIN_START) / RAIN_EVERY))
 	_rain_cols = int((_full.size.x - 2.0 * RAIN_EDGE) / RAIN_STEP) + 1

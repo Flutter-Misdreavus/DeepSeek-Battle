@@ -3,8 +3,9 @@ extends Node2D
 ## 设计见仓库外的设计方案；这里的流程全部写成协程，读起来就是剧本顺序。
 ##
 ## 图层（从下到上）：bg 背景+两侧面板 → enemy 她 → bubble 气泡 → box 框（攻击挂在框的裁剪层里，红心在最上）
-##                   → over 框外的攻击元素 / 停止按钮 / 弹窗 → hud 界面 → overlay 全屏效果和 VN 对白 → frame 标题栏 → pause 暂停菜单
+##                   → over 框外的攻击元素 / 停止按钮 / 弹窗 → hud 界面 → overlay 全屏效果和 VN 对白 → pause 暂停菜单
 
+const PAUSE_RECT := Rect2(8, 338, 32, 18)
 const ATTACK_DIR := "res://battle/attacks/%s.gd"
 
 var story_dialogue := false             # 开场 / 结尾：回车一次推进一句对白
@@ -17,7 +18,6 @@ var soul := preload("res://battle/soul.gd").new()
 var over := Node2D.new()
 var hud := preload("res://battle/hud.gd").new()
 var overlay := preload("res://battle/overlay.gd").new()
-var frame := preload("res://battle/frame.gd").new()
 var pause_ui := preload("res://battle/pause_node.gd").new()
 
 # ── 战斗状态 ──
@@ -45,6 +45,8 @@ var _abort := ""
 var _checkpoint := {}
 var _base_off := Vector2.ZERO
 var _shake := 0.0
+var _finished := false
+var _returning_to_title := false
 var _paused := false
 var _pause_sel := 0
 
@@ -61,7 +63,7 @@ func _ready() -> void:
 	auto = Dbg.val("auto")
 	_run_seed = int(Dbg.val("seed")) if Dbg.has("seed") else randi()
 	Dbg.log("战斗随机种子 %d" % _run_seed)
-	for n in [bg, enemy, bubble, box, over, hud, overlay, frame, pause_ui]:
+	for n in [bg, enemy, bubble, box, over, hud, overlay, pause_ui]:
 		add_child(n)
 	box.add_child(soul)
 	soul.shown = false
@@ -83,7 +85,7 @@ func _ready() -> void:
 func _layout() -> void:
 	_base_off = ((get_viewport_rect().size - C.BASE) / 2).floor()
 	position = _base_off
-	Inp.title_h = _base_off.y + C.TITLE_H
+	Inp.pause_rect = Rect2() if _finished else Rect2(_base_off + PAUSE_RECT.position, PAUSE_RECT.size)
 
 
 func wait(t: float) -> void:
@@ -95,14 +97,16 @@ func wait(t: float) -> void:
 # ════════════════════════════════════════════════════════════
 
 func _main() -> void:
-	var j := Dbg.val("jump")
+	var j := Dbg.consume_startup_jump()
 	if j == "":
 		await Cutscenes.intro(self)
 		await enter_phase(1, true)
 		flavor_i = 0          # 第一回合的旁白是「* DeepSeek娘 拒绝了你的请求。」
 	else:
 		await _jump(j)
-	while true:
+	if _finished or not is_inside_tree():
+		return
+	while not _finished:
 		var ended := await _round()
 		if ended:
 			return
@@ -165,8 +169,6 @@ func reset_stage() -> void:
 	enemy.modulate = Color.WHITE
 	enemy.spr.visible = true
 	enemy.aura = 0.0
-	frame.broken = false
-	frame.cracks = 0
 	bg.panels = true
 	box.fill = C.BLACK
 	big_version = ""
@@ -198,7 +200,6 @@ func enter_phase(n: int, quick := false) -> void:
 	bg.mode = P["bg"]
 	bg.seep = 1.0 if n == 2 else 0.0
 	bg.params["temperature"] = P["temperature"]
-	frame.cracks = 3 if n == 3 else 0
 	_save()
 
 
@@ -738,7 +739,7 @@ func _process(dt: float) -> void:
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and OS.has_feature("mobile") and not _paused:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and OS.has_feature("mobile") and not _paused and not _finished:
 		set_paused(true)
 
 
@@ -750,24 +751,21 @@ func set_paused(p: bool) -> void:
 	_pause_sel = 0
 
 
-## 暂停菜单的输入（pause_node 每帧调用，暂停时也运行）。标题栏的点按单独走 Inp.title_tap，不会被当成「翻页」
+## 结局只接受结局卡的输入，普通战斗支持Esc及左下角触屏暂停按钮。
 func pause_input() -> void:
-	var tt = Inp.take_title_tap()
-	var hit := frame.hit(to_local(tt)) if tt != null else ""
+	if _finished:
+		return
 	if not _paused:
-		if Inp.pause or hit in ["min", "close"]:
+		if Inp.pause:
 			Inp.pause = false
 			set_paused(true)
-		elif hit == "max":
-			var w := get_window()
-			w.mode = Window.MODE_WINDOWED if w.mode == Window.MODE_FULLSCREEN else Window.MODE_FULLSCREEN
 		return
 	var d := Inp.take_dir(true)
 	if d.y != 0:
 		_pause_sel = wrapi(_pause_sel + d.y, 0, 4)
 		Sfx.play("menu_move")
 	var choose := Inp.take_ok(true)
-	if Inp.take_cancel(true) or Inp.pause or hit == "min":
+	if Inp.take_cancel(true) or Inp.pause:
 		Inp.pause = false
 		set_paused(false)
 		return
@@ -786,10 +784,20 @@ func pause_input() -> void:
 			1:
 				Settings.toggle_invincible()
 			2:
-				set_paused(false)
-				get_tree().change_scene_to_file("res://title/title.tscn" if ResourceLoader.exists("res://title/title.tscn") else "res://battle/battle.tscn")
+				return_to_title()
 			3:
 				get_tree().quit()
+
+
+func return_to_title() -> void:
+	if _returning_to_title:
+		return
+	_returning_to_title = true
+	_finished = true
+	Inp.clear_confirm()
+	Inp.pause_rect = Rect2()
+	set_paused(false)
+	get_tree().change_scene_to_file.call_deferred("res://title/title.tscn")
 
 
 func _pause_rect(i: int) -> Rect2:
@@ -843,7 +851,12 @@ func _draw_over() -> void:
 
 
 func draw_pause(ci: CanvasItem) -> void:
+	if _finished:
+		return
 	if not _paused:
+		ci.draw_rect(PAUSE_RECT, Color(C.BLACK, 0.8))
+		Px.frame(ci, PAUSE_RECT, 1, C.GRAY_DIM)
+		Px.text(ci, PAUSE_RECT.position + Vector2(4, 3), "暂停", C.GRAY)
 		return
 	Px.screen_rect(ci, position, Color(0, 0, 0, 0.75))
 	var r := Rect2(210, 108, 220, 144)

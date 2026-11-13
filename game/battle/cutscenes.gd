@@ -1,6 +1,6 @@
 class_name Cutscenes
 ## 开场、阶段转场、失败、结局。全部是静态协程：await Cutscenes.intro(battle)。
-## b 是 battle.gd 节点；能用的东西：b.bg / b.enemy / b.bubble / b.box / b.soul / b.hud / b.overlay / b.frame / b.wait(t)
+## b 是 battle.gd 节点；能用的东西：b.bg / b.enemy / b.bubble / b.box / b.soul / b.hud / b.overlay / b.wait(t)
 
 const SCENE_UI := preload("res://battle/scene_ui.gd")
 
@@ -150,7 +150,6 @@ static func transition(b, _from: int, to: int) -> void:
 			b.bg.mode = "desktop"
 			b.enemy.set_idle("E", false)
 			b.enemy.aura = 1.0
-			b.frame.cracks = 3
 			b.bg.log("[WARN] temperature = 2.0", C.RED)
 			b.bg.log("[ERROR] 光标控制权 已转移", C.RED)
 			await b.bubble.say("温度：2.0。:)", C.RED, "voice_red")
@@ -217,17 +216,14 @@ static func finale(b, route: String) -> void:
 	await Conductor.wait_until(2.0)
 	b.enemy.set_idle("F_smile")
 	await Conductor.wait_until(4.0)
-	b.frame.cracks = 8
 	Sfx.play("crack")
 	b.shake(2.0)
 	await Conductor.wait_until(5.0)
-	b.frame.cracks = 16
 	Sfx.play("crack")
 	b.shake(3.0)
 	await Conductor.wait_until(6.0)
 	Sfx.play("shatter")
 	b.overlay.do_flash(0.4)
-	b.frame.broken = true
 	b.bg.mode = "black"
 	b.bg.panels = false
 	b.enemy.set_idle("segG_storm", false)
@@ -339,7 +335,6 @@ static func spare_ending(b) -> void:
 	b.bg.params["temperature"] = "0.0"
 	Sfx.play("spare")
 	b.bg.mode = "grid"
-	b.frame.cracks = 0
 	Conductor.play("ending")
 	b.enemy.set_idle("curtsy")
 	await b.wait(1.2)
@@ -370,9 +365,11 @@ static func spare_ending(b) -> void:
 
 # ── 结束卡 ──────────────────────────────────────────────────
 static func ending_card(b, title: String, lines: Array) -> void:
+	b._finished = true
 	b.story_dialogue = false
-	Inp.take_advance()
-	Inp.take_ok()
+	b.soul.active = false
+	Inp.pause_rect = Rect2()
+	Inp.clear_confirm()
 	b.hud.visible = false
 	b.box.visible = false
 	b.bubble.on = false
@@ -392,4 +389,4 @@ static func ending_card(b, title: String, lines: Array) -> void:
 		if Inp.take_ok() or Inp.take_tap() != null:
 			break
 	Sfx.play("menu_select")
-	b.get_tree().change_scene_to_file("res://title/title.tscn")
+	b.return_to_title()

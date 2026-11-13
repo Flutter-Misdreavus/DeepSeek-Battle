@@ -13,6 +13,7 @@ extends Node
 ##   --keys=<帧:键[:按住帧数],...>  在指定帧模拟按键（键：z x left right up down esc；默认按住 2 帧），测试真实输入路径用
 
 var args := {}
+var _startup_started := false
 var frame := 0
 var _shot_at := {}
 var _keys := {}                  # 帧 -> 键名（按下）
@@ -36,6 +37,17 @@ func _ready() -> void:
 		Engine.time_scale = float(args["speed"])
 	if args.has("shots"):
 		DirAccess.make_dir_recursive_absolute(args["shots"])
+
+
+## 直接进战斗仅用于本次启动，返回标题后不再触发。
+func start_battle_on_launch() -> bool:
+	return not _startup_started and val("jump") != "title" and (has("jump") or has("auto"))
+
+
+func consume_startup_jump() -> String:
+	var jump := val("jump") if not _startup_started else ""
+	_startup_started = true
+	return "" if jump == "title" else jump
 
 
 func has(k: String) -> bool:

@@ -19,7 +19,6 @@ const GRAY := Color("#8a8a8a")         # 思考块灰字、不可用
 const GRAY_DIM := Color("#4a4a4a")
 
 # ── 布局 ──────────────────────────────────────────────────────
-const TITLE_H := 14                    # 顶部标题栏高度
 const TEXT_BOX := Rect2(34, 196, 572, 84)   # 文字框的内框；边框 2px 画在内框外
 const BORDER := 2
 const BOX_BOTTOM := 280.0              # 弹幕框内框的底边固定在这里，变大时往上长
