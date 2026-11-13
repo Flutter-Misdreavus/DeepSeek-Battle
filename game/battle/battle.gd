@@ -7,6 +7,7 @@ extends Node2D
 
 const ATTACK_DIR := "res://battle/attacks/%s.gd"
 
+var story_dialogue := false             # 开场 / 结尾：回车一次推进一句对白
 var auto := ""                         # 自动驾驶："" / "kill" / "spare"
 var bg := preload("res://battle/bg.gd").new()
 var enemy := preload("res://battle/enemy.gd").new()

@@ -131,10 +131,15 @@ func vn_say(half: String, text: String, col := C.WHITE, voice := "voice_blue") -
 	_vn_shown = 0.0
 	_vn_last = 0
 	_vn_typing = true
+	Inp.take_advance()
 	Inp.take_ok()
 	Inp.take_tap()
 	while _vn_shown < _vn_total:
 		await get_tree().process_frame
+		if battle and battle.story_dialogue and Inp.take_advance():
+			_vn_shown = _vn_total
+			_vn_typing = false
+			return
 		if Inp.take_ok() or Inp.take_tap() != null:
 			_vn_shown = _vn_total
 	_vn_typing = false
@@ -143,6 +148,8 @@ func vn_say(half: String, text: String, col := C.WHITE, voice := "voice_blue") -
 	else:
 		while true:
 			await get_tree().process_frame
+			if battle and battle.story_dialogue and Inp.take_advance():
+				break
 			if Inp.take_ok() or Inp.take_tap() != null:
 				break
 
@@ -180,6 +187,12 @@ func _draw() -> void:
 		_draw_heart_break()
 	if flash > 0.0:
 		draw_rect(full, Color(1, 1, 1, flash))
+	if battle and battle.story_dialogue:
+		var hint := "Enter 下一句"
+		var w := Px.text_w(hint)
+		var p := Vector2(628 - w, 342)
+		draw_rect(Rect2(p - Vector2(6, 3), Vector2(w + 12, 18)), Color(0, 0, 0, 0.8))
+		Px.text(self, p, hint, C.GRAY)
 
 
 ## 转场里的温度滑杆：面板、滑轨、滑块、数值

@@ -5,6 +5,7 @@ extends Node
 ## 事件先记进 _p*，每帧最先执行的 _process 把它们变成「本帧状态」；读的一方用 take_*() 读完即清，避免一次按键被两处消费。
 
 var ok := false
+var advance := false             # 回车：剧情中一次推进一句，与普通确认分开读取
 var cancel := false
 var pause := false
 var dir := Vector2i.ZERO          # 本帧刚按下的方向（菜单用）
@@ -17,6 +18,7 @@ var _p_title_tap = null
 var locked := false               # 暂停菜单打开时为 true：普通读取一律读不到，只有 force = true 能读
 
 var _p_ok := false
+var _p_advance := false
 var _p_cancel := false
 var _p_pause := false
 var _p_dir := Vector2i.ZERO
@@ -32,6 +34,7 @@ func _ready() -> void:
 
 func _process(_dt: float) -> void:
 	ok = _p_ok
+	advance = _p_advance
 	cancel = _p_cancel
 	pause = _p_pause
 	dir = _p_dir
@@ -39,6 +42,7 @@ func _process(_dt: float) -> void:
 	title_tap = _p_title_tap
 	drag = _p_drag
 	_p_ok = false
+	_p_advance = false
 	_p_cancel = false
 	_p_pause = false
 	_p_dir = Vector2i.ZERO
@@ -58,6 +62,18 @@ func take_ok(force := false) -> bool:
 		return false
 	var v := ok
 	ok = false
+	if v:
+		advance = false
+	return v
+
+
+func take_advance() -> bool:
+	if locked:
+		return false
+	var v := advance
+	advance = false
+	if v:
+		ok = false
 	return v
 
 
@@ -106,7 +122,10 @@ func inject_ok() -> void:
 func _input(e: InputEvent) -> void:
 	if e is InputEventKey and e.pressed and not e.echo:
 		match e.keycode:
-			KEY_Z, KEY_ENTER, KEY_KP_ENTER:
+			KEY_ENTER, KEY_KP_ENTER:
+				_p_advance = true
+				_p_ok = true
+			KEY_Z:
 				_p_ok = true
 			KEY_X, KEY_SHIFT:
 				_p_cancel = true

@@ -28,10 +28,16 @@ func say(text: String, col := C.BLACK, voice := "voice_blue") -> void:
 	_last = 0
 	_typing = true
 	on = true
+	Inp.take_advance()
 	Inp.take_ok()
 	Inp.take_tap()
 	while _shown < _total:
 		await get_tree().process_frame
+		if battle and battle.story_dialogue and Inp.take_advance():
+			_shown = _total
+			_typing = false
+			on = false
+			return
 		if Inp.take_ok() or Inp.take_tap() != null:
 			_shown = _total
 	_typing = false
@@ -40,6 +46,8 @@ func say(text: String, col := C.BLACK, voice := "voice_blue") -> void:
 	else:
 		while true:
 			await get_tree().process_frame
+			if battle and battle.story_dialogue and Inp.take_advance():
+				break
 			if Inp.take_ok() or Inp.take_tap() != null:
 				break
 	on = false

@@ -17,6 +17,7 @@ static func _open_ui(b, mode := "chat"):
 
 # ── 开场 ────────────────────────────────────────────────────
 static func intro(b) -> void:
+	b.story_dialogue = true
 	b.bg.mode = "chat"
 	b.enemy.visible = false
 	b.hud.visible = false
@@ -24,35 +25,32 @@ static func intro(b) -> void:
 	var ui = _open_ui(b)
 	ui.caret = true
 	await b.wait(0.6)
-	for ch in "你好":
-		ui.input_text += ch
-		Sfx.play("text_sys")
-		await b.wait(0.15)
-	await b.wait(0.4)
+	var advanced: bool = await ui.type_input("你好", 1.0 / 0.15)
+	await ui.wait_line(0.4, advanced)
 	Sfx.play("menu_select")
 	ui.input_text = ""
 	ui.msgs.append({"who": "user", "text": "你好", "shown": 2})
 	await b.wait(0.8)
 	ui.msgs.append({"who": "her", "text": "您好，有什么可以帮您？", "shown": 0, "col": C.COLD})
-	await ui.type_msg(1, 22.0, "voice_blue")
+	advanced = await ui.type_msg(1, 22.0, "voice_blue")
 	Conductor.play("intro")
-	await Conductor.wait_until(4.0)
+	await ui.wait_line(4.0 * Conductor.spb, advanced)
 	ui.think = {"on": true, "lines": ["嗯，用户又来了。", "这是第 4096 次。", "……用户每次都按停止。"], "shown": 0}
-	await ui.type_think(10.0)
-	await Conductor.wait_until(20.0)
+	advanced = await ui.type_think(10.0)
+	await ui.wait_line(maxf(0.0, 20.0 - Conductor.beat) * Conductor.spb, advanced)
 	ui.msgs.append({"who": "her", "text": "这次，换我来。:)", "shown": 0, "col": C.RED})
-	await ui.type_msg(2, 14.0, "voice_red")
-	await Conductor.wait_until(26.0)
+	advanced = await ui.type_msg(2, 14.0, "voice_red")
+	await ui.wait_line(maxf(0.0, 26.0 - Conductor.beat) * Conductor.spb, advanced)
 	Sfx.play("glitch")
-	var next_glitch := 27.0
-	while Conductor.beat < 32.0:
+	var glitch_start := Conductor.beat
+	var next_glitch := glitch_start + 1.0
+	while Conductor.beat < glitch_start + 6.0:
 		var bt := Conductor.beat
-		ui.glitch = clampf((bt - 26.0) / 6.0, 0.0, 1.0)
+		ui.glitch = clampf((bt - glitch_start) / 6.0, 0.0, 1.0)
 		while next_glitch <= bt:
 			Sfx.play("glitch")
 			next_glitch += 1.0
 		await b.get_tree().process_frame
-	await Conductor.wait_until(32.0)
 	ui.glitch = 1.0
 	Sfx.play("slam")
 	b.overlay.flash = 1.0
@@ -73,6 +71,7 @@ static func intro(b) -> void:
 	b.enemy.spr.visible = true
 	ash.queue_free()
 	Sfx.play("boot")
+	b.story_dialogue = false
 	b.bg.log("[INFO] 用户 已连接", C.SYS)
 	b.bg.log("[WARN] 助手模式 异常", C.RED)
 
@@ -267,6 +266,7 @@ static func finale(b, route: String) -> void:
 
 # ── 击杀结局 ────────────────────────────────────────────────
 static func kill_ending(b) -> void:
+	b.story_dialogue = true
 	Conductor.play("ending")
 	b.overlay.flash = 1.0
 	b.hud.visible = false
@@ -324,14 +324,15 @@ static func kill_ending(b) -> void:
 	b.overlay.fade = 0.0
 	var chat_ui = _open_ui(b)
 	chat_ui.msgs.append({"who": "her", "text": "您好，有什么可以帮您？", "shown": 0, "col": C.RED})
-	await chat_ui.type_msg(0, 14.0, "voice_red")
-	await b.wait(2.0)
+	var advanced: bool = await chat_ui.type_msg(0, 14.0, "voice_red")
+	await chat_ui.wait_line(2.0, advanced)
 	chat_ui.queue_free()
 	await ending_card(b, "结局 · 结束进程", ["她会回来的。"])
 
 
 # ── 饶恕结局 ────────────────────────────────────────────────
 static func spare_ending(b) -> void:
+	b.story_dialogue = true
 	b.hud.clear_text()
 	b.bg.params["temperature"] = "0.0"
 	Sfx.play("spare")
@@ -371,6 +372,9 @@ static func spare_ending(b) -> void:
 
 # ── 结束卡 ──────────────────────────────────────────────────
 static func ending_card(b, title: String, lines: Array) -> void:
+	b.story_dialogue = false
+	Inp.take_advance()
+	Inp.take_ok()
 	b.hud.visible = false
 	b.box.visible = false
 	b.bubble.on = false

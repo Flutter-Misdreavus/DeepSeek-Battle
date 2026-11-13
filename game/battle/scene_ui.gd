@@ -257,38 +257,68 @@ func _draw_card() -> void:
 # 打字协程
 # ════════════════════════════════════════════════════════════
 
-## 逐字打出第 i 条消息（每字一声 voice）
-func type_msg(i: int, cps: float, voice: String) -> void:
+## 逐字打出一句；回车只结束当前句，返回是否由回车推进。
+func type_input(text: String, cps: float) -> bool:
+	Inp.take_advance()
+	input_text = ""
+	var elapsed := 0.0
+	while input_text.length() < text.length():
+		await get_tree().process_frame
+		if Inp.take_advance():
+			input_text = text
+			return true
+		elapsed += get_process_delta_time()
+		var shown := mini(text.length(), int(elapsed * cps))
+		if shown > input_text.length():
+			Sfx.play("text_sys")
+		input_text = text.substr(0, shown)
+	return false
+
+
+func type_msg(i: int, cps: float, voice: String) -> bool:
 	if i < 0 or i >= msgs.size():
-		return
+		return false
 	var m: Dictionary = msgs[i]
-	var text := str(m.get("text", ""))
-	var total := text.length()
-	m["shown"] = 0
-	var wait_s := 1.0 / maxf(cps, 0.001)
-	for n in total:
-		m["shown"] = n + 1
-		Sfx.play(voice)
-		await _wait(wait_s)
+	return await _type_span(m, "shown", 0, str(m.get("text", "")).length(), cps, voice)
 
 
-## 逐字打出思考块（不用声音）
-func type_think(cps: float) -> void:
+## 思考块中的每一行都是独立的一句，一次回车不能跳过后续行。
+func type_think(cps: float) -> bool:
 	if not bool(think.get("on", false)):
+		return false
+	var offset := 0
+	var advanced := false
+	for line in think.get("lines", []):
+		var count := str(line).length()
+		advanced = await _type_span(think, "shown", offset, count, cps)
+		offset += count
+	return advanced
+
+
+func _type_span(target: Dictionary, field: String, offset: int, count: int, cps: float, voice := "") -> bool:
+	Inp.take_advance()
+	target[field] = offset
+	var elapsed := 0.0
+	while int(target[field]) < offset + count:
+		await get_tree().process_frame
+		if Inp.take_advance():
+			target[field] = offset + count
+			return true
+		elapsed += get_process_delta_time()
+		var shown := mini(count, int(elapsed * cps))
+		if shown + offset > int(target[field]) and voice != "":
+			Sfx.play(voice)
+		target[field] = offset + shown
+	return false
+
+
+## 当前句的自动停留时间。若打字期间已按回车，不再等待同一句。
+func wait_line(seconds: float, advanced := false) -> void:
+	if advanced:
 		return
-	var arr: Array = think.get("lines", [])
-	var total := 0
-	for line in arr:
-		total += str(line).length()
-	think["shown"] = 0
-	var wait_s := 1.0 / maxf(cps, 0.001)
-	for n in total:
-		think["shown"] = n + 1
-		await _wait(wait_s)
-
-
-func _wait(sec: float) -> void:
-	if battle != null:
-		await battle.wait(sec)
-	else:
-		await get_tree().create_timer(sec, false).timeout
+	var elapsed := 0.0
+	while elapsed < seconds:
+		await get_tree().process_frame
+		if Inp.take_advance():
+			return
+		elapsed += get_process_delta_time()
