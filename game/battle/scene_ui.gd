@@ -1,6 +1,6 @@
 extends Node2D
 ## 过场专用绘制节点：聊天界面（mode = "chat"）、结束卡（mode = "card"）、
-## 鲸落（mode = "fall"）、鲸鱼送行（mode = "escort"）。
+## 鲸落（mode = "fall"）、鲸鱼送行（mode = "escort"）、白米饭（mode = "rice"：碗、排队的小鲸鱼、Zzz）。
 ## 由 cutscenes.gd 创建并 add_child 到 battle 上，插在 overlay 下面、标题栏下面，用完 queue_free()。
 
 const CHAT_X := 120.0
@@ -39,6 +39,13 @@ var leave := 0.0                      # escort 往右游出画面
 var fall := 0.0                       # 巨鲸下沉进度 0..1
 var caption_a := 0.0                  # 字幕透明度
 
+# ── rice ────────────────────────────────────────────────────
+var bowl_from := Vector2.ZERO          # 碗飞出的起点
+var bowl_to := Vector2.ZERO            # 碗落到的位置（她手里）
+var bowl_k := -1.0                     # < 0 不画碗；0..1 飞行进度，1 = 停在 bowl_to
+var queue_a := 0.0                     # 文字框里排队的小鲸鱼透明度
+var zzz_at = null                      # Vector2：Zzz 的起点（她头旁边）；null = 不画
+
 var _snow: Array = []
 var _t := 0.0
 var _rows: Array = []                 # 本帧已经画出的文字行，故障时按横带重画
@@ -61,6 +68,8 @@ func _draw() -> void:
 			_draw_fall()
 		"escort":
 			_draw_escort()
+		"rice":
+			_draw_rice()
 		_:
 			_draw_chat()
 
@@ -401,3 +410,69 @@ func wait_line(seconds: float, advanced := false) -> void:
 		if Inp.take_advance():
 			return
 		elapsed += get_process_delta_time()
+
+
+# ════════════════════════════════════════════════════════════
+# 白米饭
+# ════════════════════════════════════════════════════════════
+
+func _draw_rice() -> void:
+	if bowl_k >= 0.0:
+		_draw_rice_bowl()
+	if queue_a > 0.0:
+		_draw_rice_queue()
+	if zzz_at != null:
+		_draw_rice_zzz()
+
+
+func _draw_rice_bowl() -> void:
+	var e := 1.0 - pow(1.0 - clampf(bowl_k, 0.0, 1.0), 2.0)
+	var p: Vector2 = bowl_from.lerp(bowl_to, e) + Vector2(0, -40.0 * sin(PI * e))
+	var o := (p - Vector2(6, 4)).floor()
+	Px.bitmap(self, _rice_bowl_rows("o"), o, C.WHITE)
+	Px.bitmap(self, _rice_bowl_rows("S"), o, C.SYS)
+	Px.bitmap(self, _rice_bowl_rows("W"), o, BOWL_BODY)
+	for j in 3:
+		var x := o.x + 3.0 + j * 3.0
+		for n in 4:
+			var u := fposmod(_t * 0.8 + j * 0.33 + n * 0.25, 1.0)
+			var sp := Vector2(x + 2.0 * sin(u * TAU + j), o.y - 1.0 - u * 14.0).floor()
+			draw_rect(Rect2(sp, Vector2(1, 1)), Color(C.WHITE, 0.6 * (1.0 - u)))
+
+
+func _rice_bowl_rows(letter: String) -> Array:
+	var out: Array = []
+	for row in BOWL_ROWS:
+		var s := str(row)
+		for other in ["o", "S", "W"]:
+			if other != letter:
+				s = s.replace(other, ".")
+		out.append(s.replace(letter, "X"))
+	return out
+
+
+func _draw_rice_queue() -> void:
+	for i in 5:
+		var p := Vector2(C.TEXT_BOX.end.x - 16.0 - i * 18.0, C.TEXT_BOX.end.y - 10.0 + 2.0 * sin(_t * 4.0 + i * 0.9))
+		Whale.draw(self, p, Vector2(-1, 0), 12, Color(C.WHITE, queue_a))
+
+
+func _draw_rice_zzz() -> void:
+	var origin: Vector2 = zzz_at
+	for n in 3:
+		var u := fposmod(_t / 2.4 + n / 3.0, 1.0)
+		var p := origin + Vector2(u * 16.0 + 2.0 * sin(u * TAU * 1.5), -u * 24.0)
+		var a := minf(1.0, u * 4.0) * (1.0 - u)
+		Px.text(self, p, "Z", Color(C.WHITE, a))
+
+
+const BOWL_ROWS := [
+	"...oooooo...",
+	".oooooooooo.",
+	"SSSSSSSSSSSS",
+	".WWWWWWWWWW.",
+	"..WWWWWWWW..",
+	"...WWWWWW...",
+	"....WWWW....",
+]
+const BOWL_BODY := Color("#c8d2e6")

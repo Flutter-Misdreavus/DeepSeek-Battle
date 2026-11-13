@@ -362,6 +362,106 @@ static func spare_ending(b) -> void:
 	await ending_card(b, "结局 · 饶恕", lines)
 
 
+# ── 白米饭：交给她，她吃饱睡着（战斗就此跳过） ─────────────────
+## 道具旁白已经由 do_item 打完；这里演她的反应和吃饭，最后把 b.asleep 置真
+static func rice(b) -> void:
+	b.bubble.on = false
+	b.hud.clear_text()
+	Conductor.stop(0.8)
+	var ui = _open_ui(b, "rice")
+	b.rice_ui = ui
+	# 碗从文字框飞到她手里
+	ui.bowl_from = C.TEXT_BOX.get_center()
+	ui.bowl_to = C.STAGE_FOOT + Vector2(0, -C.STAGE_H * 0.38)
+	ui.bowl_k = 0.0
+	Sfx.play("menu_select")
+	var fly: Tween = b.create_tween()
+	fly.tween_property(ui, "bowl_k", 1.0, 0.6)
+	await fly.finished
+	await b.wait(0.5)
+	var voice := "voice_red" if b.phase == 2 else "voice_blue"
+	for step in Story.RICE[b.phase]:
+		await _rice_step(b, ui, step, voice)
+	# 公共段：开吃。她身上的红色退掉，换成结局的曲子
+	Conductor.play("ending")
+	var calm: Tween = b.create_tween().set_parallel()
+	calm.tween_property(b.enemy, "aura", 0.0, 1.0)
+	calm.tween_property(b.bg, "seep", 0.0, 2.0)
+	for step in Story.RICE_EAT:
+		await _rice_step(b, ui, step, "voice_blue")
+	await b.overlay.vn_close()
+	# 吃饱，睡着
+	ui.bowl_k = -1.0
+	b.enemy.set_idle("sleep")
+	var r: Rect2 = b.enemy.rect()
+	ui.zzz_at = r.position + Vector2(r.size.x * 0.62, r.size.y * 0.22)
+	var q_out: Tween = b.create_tween()
+	q_out.tween_property(ui, "queue_a", 0.0, 0.6)
+	b.asleep = true
+	b.bg.log("[INFO] Deepseek 休眠中", C.SYS)
+	await b.hud.type_text(Story.RICE_SLEEP)
+
+
+static func _rice_step(b, ui, step: Array, voice: String) -> void:
+	match step[0]:
+		"vn":
+			await b.overlay.vn_say(step[1], step[2], C.WHITE, voice)
+		"text":
+			await b.overlay.vn_close()
+			await b.hud.type_text(step[1])
+		"queue":
+			var tw: Tween = b.create_tween()
+			tw.tween_property(ui, "queue_a", 1.0, 0.6)
+		"temp":
+			# 第三阶段：热饭让温度一路降回 0.0（转场里被她推到 2.0 的那根滑杆）
+			b.overlay.temp_pos = C.TEXT_BOX.get_center()
+			b.overlay.temp_k = 2.0
+			await b.wait(0.5)
+			var tw: Tween = b.create_tween().set_parallel()
+			tw.tween_property(b.overlay, "temp_k", 0.0, 2.0)
+			tw.tween_property(b.enemy, "aura", 0.0, 2.0)
+			var last_v := "%.1f" % b.overlay.temp_k
+			while tw.is_running():
+				await b.get_tree().process_frame
+				var v := "%.1f" % b.overlay.temp_k
+				if v != last_v:
+					last_v = v
+					Sfx.play("version_tick", 1.0 + 0.3 * (b.overlay.temp_k - 0.7))
+			b.bg.params["temperature"] = "0.0"
+			b.bg.log("[INFO] temperature = 0.0", C.SYS)
+			await b.wait(0.6)
+			b.overlay.temp_k = -1.0
+
+
+## 「吃白饭」结局：饶恕睡着的她 → 关窗 → 新对话里只剩「服务器繁忙」
+static func rice_ending(b) -> void:
+	b.story_dialogue = true
+	b.hud.clear_text()
+	Sfx.play("spare")
+	b.enemy.modulate.a = 0.5
+	await b.hud.type_text(Story.RICE_SPARE)
+	await b.overlay.tween("fade", 1.0, 1.0)
+	b.rice_ui.queue_free()
+	b.rice_ui = null
+	b.hud.visible = false
+	b.box.visible = false
+	b.enemy.visible = false
+	var ui = _open_ui(b)
+	ui.caret = true
+	await b.overlay.tween("fade", 0.0, 0.6)
+	var advanced: bool = await ui.type_input("你好", 1.0 / 0.15)
+	await ui.wait_line(0.4, advanced)
+	Sfx.play("menu_select")
+	ui.input_text = ""
+	ui.msgs.append({"who": "user", "text": "你好", "shown": 2})
+	await b.wait(1.2)
+	ui.msgs.append({"who": "her", "text": "服务器繁忙，请稍后再试。", "shown": 0, "col": C.GRAY})
+	advanced = await ui.type_msg(1, 14.0, "text_sys")
+	await ui.wait_line(2.5, advanced)
+	ui.queue_free()
+	await ending_card(b, "结局 · 吃白饭", ["原来服务器繁忙的时候，", "她在吃饭。"])
+
+
 # ── 结束卡 ──────────────────────────────────────────────────
 static func ending_card(b, title: String, lines: Array) -> void:
 	b._finished = true

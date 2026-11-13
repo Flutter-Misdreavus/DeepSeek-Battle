@@ -4,7 +4,7 @@ extends Node
 ## 支持的开关：
 ##   --jump=<P1-1|P2-3|P3-2|final_kill|final_spare|end_kill|end_spare|gameover|title>  跳过开场直接进入某处
 ##   --god               不扣血
-##   --auto=<kill|spare> 自动驾驶：自动选菜单、自动翻页（配合 --god 跑通整条路线）
+##   --auto=<kill|spare|rice> 自动驾驶：自动选菜单、自动翻页（配合 --god 跑通整条路线；rice = 第一回合就给白米饭）
 ##   --mute              静音
 ##   --shots=<目录>      截图目录；--shot-every=<帧> 每隔几帧截一张；--shot-at=<帧,帧,...> 指定帧截图
 ##   --quit-at=<帧>      到这一帧退出

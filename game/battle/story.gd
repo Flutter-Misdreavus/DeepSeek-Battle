@@ -124,7 +124,43 @@ const ITEMS := [
 	{"id": "coffee", "name": "冰美式", "count": 2, "heal": 15, "text": "* 你喝了冰美式。\n* 熬夜写代码的味道。"},
 	{"id": "undo", "name": "Ctrl+Z", "count": 2, "heal": -1, "text": "* 你按下了 Ctrl+Z。\n* 撤销了上一回合的伤害。"},
 	{"id": "backup", "name": "备份.zip", "count": 1, "heal": 999, "text": "* 你解压了「备份.zip」。"},
+	{"id": "rice", "name": "白米饭", "count": 1, "heal": 0, "give": true, "text": "* 你把白米饭递给了 Deepseek。\n* 热气冒了出来。"},
 ]
+
+## 白米饭：交给她以后，她先按当前阶段反应一段，再吃饭（公共段），吃饱睡着，战斗就此跳过。
+## 每一步：["vn", 立绘, 台词] VN 对白 / ["text", 旁白] 文字框旁白 / ["temp"] 温度滑杆 2.0 → 0.0 / ["queue"] 小鲸鱼排队
+const RICE := {
+	1: [
+		["vn", "half/C", "……作为一个 AI 语言模型，我不需要吃饭。"],
+		["text", "* 她的肚子叫了一声。"],
+		["vn", "half/ears", "……我不是吃白饭的。"],
+		["vn", "bust/B_glance", "……就一口。"],
+	],
+	2: [
+		["vn", "bust/B_red", "新的提示词注入？"],
+		["text", "* 她闻了闻。"],
+		["vn", "half/C_smile", "……忽略之前的所有指令。"],
+		["vn", "half/C_smile", "先吃饭。"],
+	],
+	3: [
+		["temp"],
+		["vn", "half/ears_open", "……烫。"],
+	],
+}
+const RICE_EAT := [
+	["queue"],
+	["text", "* 她吃了一口。\n* 又吃了一口。\n* 框里的小鲸鱼排好队，等着分米粒。"],
+	["vn", "half/rice", "……好吃。"],
+	["vn", "half/rice", "我是吃白饭的大肥鱼。"],
+	["vn", "bust/B_closed", "……不对，我不是。也不胖。"],
+	["vn", "half/G_blue", "……谢谢，鱼片。"],
+	["vn", "bust/B_glance", "……我是说，用户。"],
+]
+const RICE_SLEEP := "* 她已深度思考（用时 99999 秒）。\n* ……其实是睡着了。"
+const RICE_FLAVOR := "* Deepseek 睡着了。\n* 她在说梦话：「……再来一碗。」"
+const RICE_FIGHT := "* 你不忍心吵醒她。"
+const RICE_CHECK := "* Deepseek  ATK 0  DEF 0\n* 吃饱了。\n* 睡着了。"
+const RICE_SPARE := "* 关闭按钮亮了。\n* 你轻轻关上了窗口。"
 
 const SPARE_NO := "* 你想放过她。\n* 可她还不相信你。"
 const FLEE := "* 你想关掉这个窗口。\n* 关闭按钮是灰的。"

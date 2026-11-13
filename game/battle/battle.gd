@@ -29,6 +29,8 @@ var items: Array = []
 var version := 4096
 var spare := 0                         # 0 = 没进展；1 = 本阶段做了关键行动；2 = 又躲过一次攻击且没碰停止 → 进下一阶段
 var spare_ready := false               # 终局后她跪下，可以饶恕
+var asleep := false                    # 吃了白米饭睡着了：她不再出招，饶恕进「吃白饭」结局
+var rice_ui = null                     # 白米饭的碗、排队的小鲸鱼、Zzz（Cutscenes.rice 创建，结局时释放）
 var finale_done := false
 var event_line := ""                   # 她下回合先说的话（打中她、按了停止之后）
 var next_speed := 1.0
@@ -129,6 +131,9 @@ func _round() -> bool:
 	var res := await _player_turn()
 	if res == "spared":
 		await Cutscenes.spare_ending(self)
+		return true
+	if res == "rice_spared":
+		await Cutscenes.rice_ending(self)
 		return true
 	if her_hp <= 0:
 		return await _kill_route()
@@ -247,6 +252,8 @@ func _player_turn() -> String:
 	var flavor: String = P["flavor"][flavor_i % P["flavor"].size()]
 	if spare_ready:
 		flavor = "* Deepseek 跪在地上。\n* 她不再攻击了。"
+	if asleep:
+		flavor = Story.RICE_FLAVOR
 	flavor_i += 1
 	hud.start_typing(flavor)
 	if auto != "":
@@ -260,6 +267,10 @@ func _player_turn() -> String:
 				if t < 0:
 					hud.start_typing(flavor, C.WHITE, false)
 					continue
+				if asleep:
+					await hud.type_text(Story.RICE_FIGHT)
+					hud.start_typing(flavor, C.WHITE, false)
+					continue
 				var acc := await hud.fight_bar()
 				await do_fight(acc)
 				return "fight"
@@ -268,12 +279,15 @@ func _player_turn() -> String:
 				if t < 0:
 					hud.start_typing(flavor, C.WHITE, false)
 					continue
-				var acts: Array = P["acts"]
+				var acts: Array = [{"id": "check", "name": "查看"}] if asleep else P["acts"]
 				var names := acts.map(func(a): return a["name"])
 				var k := await hud.pick_option(names, 2)
 				if k < 0:
 					hud.start_typing(flavor, C.WHITE, false)
 					continue
+				if asleep:
+					await hud.type_text(Story.RICE_CHECK)
+					return "act"
 				await do_act(acts[k]["id"], acts[k]["name"])
 				return "act"
 			2:
@@ -290,11 +304,13 @@ func _player_turn() -> String:
 				await do_item(have[k])
 				return "item"
 			3:
-				var k := await hud.pick_option(["饶恕", "逃跑"], 1, {0: C.BTN_HI} if spare_ready else {})
+				var k := await hud.pick_option(["饶恕", "逃跑"], 1, _name_col())
 				if k < 0:
 					hud.start_typing(flavor, C.WHITE, false)
 					continue
 				if k == 0:
+					if asleep:
+						return "rice_spared"
 					if spare_ready:
 						return "spared"
 					await hud.type_text(Story.SPARE_NO)
@@ -305,11 +321,16 @@ func _player_turn() -> String:
 
 
 func _name_col() -> Dictionary:
-	return {0: C.BTN_HI} if spare_ready else {}
+	return {0: C.BTN_HI} if spare_ready or asleep else {}
 
 
 func _auto_turn() -> String:
 	hud.btn_hold = false
+	if auto == "rice":
+		if asleep:
+			return "rice_spared"
+		await do_item(items.filter(func(it): return it["id"] == "rice")[0])
+		return "item"
 	if spare_ready:
 		if auto == "spare":
 			return "spared"
@@ -397,6 +418,11 @@ func do_item(it: Dictionary) -> void:
 	for orig in items:
 		if orig["id"] == it["id"]:
 			orig["count"] = it["count"]
+	if it.get("give", false):
+		bg.log("[INFO] 用户 · 物品 · %s" % it["name"], C.SYS)
+		await hud.type_text(it["text"])
+		await Cutscenes.rice(self)
+		return
 	var heal: int = it["heal"]
 	if heal < 0:
 		heal = last_damage
@@ -420,7 +446,7 @@ func do_item(it: Dictionary) -> void:
 # ════════════════════════════════════════════════════════════
 
 func _enemy_turn() -> void:
-	if spare_ready:
+	if spare_ready or asleep:
 		return
 	var P: Dictionary = Story.PHASES[phase]
 	var line := event_line
