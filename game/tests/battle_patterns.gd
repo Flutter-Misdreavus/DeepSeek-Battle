@@ -68,16 +68,20 @@ func _random_safety() -> void:
 			moe._picks.clear()
 			moe.mirror = seed_value % 2 == 1
 			moe.speed = 1.25
+			moe.begin()
 			for i in 12:
 				var pick: Array = moe._choose_columns()
+				_check(pick.has(moe._player_column()), "玩家所在列必须激活")
 				_check(moe._pick_ok(pick), "MoE 必须保留可达的相邻安全列且不连续重复")
 				_check(pick.size() == (2 if i < 6 else (3 if i < 9 else 4)), "MoE 难度应逐步增加")
 				moe._picks.append(pick)
 			_battle.soul.pos = _positions(rain.box)[j]
-			var shower: Dictionary = rain._make_rain()
-			_check(shower["xs"].size() == 10 and is_equal_approx(shower["gap"].y - shower["gap"].x, 64.0), "顶部雨必须十片并留64像素通道")
-			for x in shower["xs"]:
-				_check(x + 2 <= shower["gap"].x or x - 2 >= shower["gap"].y, "顶部碎片不能侵占安全通道")
+			var gap: Vector2 = rain._make_gap()
+			_check(is_equal_approx(gap.y - gap.x, 64.0), "雪花保留64像素安全通道")
+			var flake: Dictionary = rain._make_snow(rain.SNOW_START, gap)
+			for i in 20:
+				var pos: Vector2 = rain._snow_pos(flake, flake["at"] + flake["fall"] * i / 20.0)
+				_check(pos.x + flake["size"] * 0.5 <= gap.x or pos.x - flake["size"] * 0.5 >= gap.y, "雪花摆动不能侵占安全通道")
 		for a in [busy, marquee, moe, rain]:
 			a.free()
 
@@ -112,7 +116,7 @@ func _tetris() -> void:
 		a.mirror = mirrored
 		a.setup()
 		a.box = C.dodge_box(120, 144)
-		_check(a._pieces.size() == 14 and a.duration == 18.0, "14块且18拍")
+		_check(a._pieces.size() == 14 and a.duration == 18.0 and is_equal_approx(a.speed, 0.7), "14块、内部18拍且全段减速30%")
 		for p in a._pieces:
 			_check(p["land"] < a.SHATTER_AT, "所有方块须在全清前落地")
 			var board: Dictionary = a._board_at(p["land"])
@@ -184,14 +188,89 @@ func _flock() -> void:
 		a.tick(0.0)
 		_check(snapshot == a._tree, "暂停或零步长不能继续移动鱼群")
 		runs.append(snapshot)
-		a.t = 17.0
-		a.tick(10.0)
+		a.t = a.duration
+		a.tick(a.duration - 7.0)
 		for n in a._tree:
-			_check(not a._alive(n, 17.0), "末代应按寿命回收")
+			_check(not a._alive(n, a.duration), "末代应按寿命回收")
 		a.free()
 	_check(runs[0].size() == runs[1].size(), "不同帧率应产生相同分裂数")
 	for i in runs[0].size():
 		_check((runs[0][i]["pos"] as Vector2).distance_to(runs[1][i]["pos"]) < 0.001, "固定步长应与帧率无关")
+
+
+func _targeted_moe() -> void:
+	var conductor = root.get_node("Conductor")
+	var spb: float = conductor.spb
+	for width in [192.0, 620.0]:
+		for mirrored in [false, true]:
+			var a = _attack("p1_moe", 9)
+			a.box = Rect2(10, 20, width, 260)
+			a.mirror = mirrored
+			conductor.spb = 60.0 / (110.0 if width == 192.0 else 150.0)
+			a.speed = 1.25 if width == 192.0 else 1.0
+			a.begin()
+			for i in 33:
+				_battle.soul.pos = Vector2(lerpf(a.box.position.x + C.SOUL_HALF.x, a.box.end.x - C.SOUL_HALF.x, i / 32.0), a.box.get_center().y)
+				a._picks.clear()
+				var pick: Array = a._choose_columns()
+				_check(pick.has(a._player_column()) and a._pick_ok(pick), "普通与宽屏MoE都必须锁定玩家列且保留可达安全列")
+				a._picks.append(pick)
+				a.prev_t = a.t
+				a.t = 1.0 + a._warning_beats + 0.1
+				a.clear_hazards()
+				a.tick(0.0)
+				_check(a.hits(_battle.soul.hitbox()), "MoE站桩必须命中，含列边界")
+			# 精确列边界也不能躲进判定缝。
+			for i in range(1, 8):
+				_battle.soul.pos.x = a.box.position.x + width * i / 8.0
+				a._picks.clear()
+				a._picks.append(a._choose_columns())
+				a.t = 1.0 + a._warning_beats + 0.1
+				a.clear_hazards()
+				a.tick(0.0)
+				_check(a.hits(_battle.soul.hitbox()), "精确列边界不能站桩")
+			a.free()
+	conductor.spb = spb
+
+
+func _snow_and_waves() -> void:
+	var rain = _attack("fin_bsod", 19)
+	_battle.soul.pos = rain.box.get_center()
+	var live_samples := 0
+	for i in 160:
+		rain.prev_t = rain.t
+		rain.t = i / 10.0
+		rain.clear_hazards()
+		rain.tick(0.1)
+		if rain.t >= 3.1 and rain.t < 15.0:
+			var live := 0
+			for f in rain._rains:
+				if rain.t >= f["at"] and rain.t < f["at"] + f["fall"]:
+					live += 1
+			_check(live > 0, "雪花应连续落下，中途不能整批消失")
+			live_samples += 1
+	_check(rain._rains.size() == 48 and live_samples > 100, "持续每四分之一拍生成一片雪花")
+	for i in range(1, rain._rains.size()):
+		_check(is_equal_approx(rain._rains[i]["at"] - rain._rains[i - 1]["at"], 0.25), "雪花应错时连续生成")
+	rain.free()
+	var a = _attack("p2_distill", 19)
+	a.begin()
+	var teachers := [0, 0, 0]
+	for n in a._tree:
+		if n["gen"] == 0:
+			teachers[n["wave"]] += 1
+	_check(teachers == [1, 1, 2] and a.duration == 25.0, "三波应分别为一、一、两位教师且第三波有完整演出时间")
+	a.t = 16.5
+	a.tick(16.5)
+	var third := 0
+	for n in a._tree:
+		if n["gen"] == 0 and n["wave"] == 2 and a._alive(n, a.t):
+			third += 1
+	_check(third == 2, "第三波两个教师须同时在场")
+	a.free()
+	var cutscenes = load("res://battle/cutscenes.gd")
+	_check(cutscenes.MEDLEY_BEATS == 8.0, "混剪每段必须由4拍加倍到8拍")
+	_check(cutscenes.GIANT_START == 56.0 and cutscenes.SWALLOW_START == 72.0 and cutscenes.CTRL_A_START == 88.0, "后续终局时间必须顺延16拍")
 
 
 func _flock_edges() -> void:
@@ -199,7 +278,7 @@ func _flock_edges() -> void:
 		var a = _attack("p2_distill", 21)
 		a.mirror = mirrored
 		a.begin()
-		for frame in 17 * 60:
+		for frame in int(a.duration) * 60:
 			var before: Array = a._tree.duplicate(true)
 			_battle.soul.pos = _positions(a.box)[(frame / 120) % 5]
 			a.prev_t = a.t
@@ -321,6 +400,8 @@ func _run() -> void:
 	_random_safety()
 	_cache_and_seed()
 	_tetris()
+	_targeted_moe()
+	_snow_and_waves()
 	_flock()
 	_flock_edges()
 	await _controls_and_health()

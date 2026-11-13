@@ -2,21 +2,23 @@ extends Attack
 ## 终局「蓝屏」（8–24 拍）
 ##
 ## 整个屏幕死机，刷成一块 Windows 蓝屏。蓝屏上的「:(」翻过来变成她的「:)」，
-## 左下角二维码的像素被一片片抛出去，两波碎片从框顶落下。
+## 左下角二维码的像素被一片片抛出去，碎片像雪花一样持续从框顶飘落。
 ## - [0, 0.25) 蓝色从框顶向下刷满；之后整个框 #0b56c4。
 ## - [2, 2.5) 「(」以自身中心水平翻成「)」，过零时白变红；第 2 拍响 glitch、换 F_smile。
 ## - 二维码 21×21、每格 4px，三个角是 7×7 定位块，其余 50% 随机实心（格子够六批碎片用）。
 ## - 第 3/5/7/9/11/13 拍各从二维码里抛出一批像素碎片，碎片位置是爆开拍数的纯函数。
-## - [8,10) / [12,14) 两波带 64px 安全通道的顶部碎片；第 15 拍「重启」，蓝色和文字淡出。
+## - 第3–15拍每0.25拍生成一片雪花，缓慢摆动下落；每四拍锁定一条64px安全通道。
 
 const BLUE := Color("#0b56c4")
 const QR_N := 21
 const QR_CELL := 4.0
 const QR_OFF := Vector2(48.0, 164.0)
 const BURSTS := [3.0, 5.0, 7.0, 9.0, 11.0, 13.0]
-const RAIN_AT := [8.0, 12.0]
+const SNOW_START := 3.0
+const SNOW_END := 15.0
+const SNOW_INTERVAL := 0.25
+const SNOW_SECTION := 4.0
 const RAIN_GAP := 64.0
-const RAIN_SIZE := 4.0
 const WARN := 0.5
 const GRAVITY := 90.0
 
@@ -24,13 +26,15 @@ var _qr: Array = []                 # 非定位块：实心 / 空
 var _finder: Array = []             # 这一格属不属于三个定位块
 var _removed: Array = []            # 已经被抛走的格子
 var _bursts: Array = []             # 每次爆：[{cell:Vector2i, ang:float, spd:float}]
-var _rains: Array = []
+var _rains: Array = []             # 缓存每片雪花的时间、位置和摆动，不在绘制中重新抽样
+var _snow_gaps: Array[Vector2] = []
 
 
 func setup() -> void:
 	duration = 16.0
 	box_size = Vector2(620, 260)
 	_rains.clear()
+	_snow_gaps.clear()
 	_qr = []
 	_finder = []
 	_removed = []
@@ -75,23 +79,28 @@ func setup() -> void:
 		_bursts.append(arr)
 
 
-## 顶部雨只在预警开始时生成一次。缺口按玩家当前位置约束，覆盖红心的完整宽度。
-func _make_rain() -> Dictionary:
+## 每个四拍小节预警时锁定一次通道，雪花的位置、速度和摆动分别随机。
+func _make_gap() -> Vector2:
 	var cx := clampf(soul_pos().x + rng.randf_range(-24.0, 24.0), box.position.x + RAIN_GAP / 2.0, box.end.x - RAIN_GAP / 2.0)
-	var gap := Vector2(cx - RAIN_GAP / 2.0, cx + RAIN_GAP / 2.0)
+	return Vector2(cx - RAIN_GAP / 2.0, cx + RAIN_GAP / 2.0)
+
+
+func _make_snow(at: float, gap: Vector2) -> Dictionary:
+	var size := rng.randf_range(2.0, 4.0)
+	var drift := rng.randf_range(2.0, 6.0)
+	var pad := drift + size * 0.5
 	var candidates: Array[float] = []
-	for x in range(int(box.position.x + 4), int(box.end.x - 3), 8):
-		if x + RAIN_SIZE / 2.0 <= gap.x or x - RAIN_SIZE / 2.0 >= gap.y:
+	for x in range(int(box.position.x + pad) + 1, int(box.end.x - pad), 8):
+		if x + pad <= gap.x or x - pad >= gap.y:
 			candidates.append(float(x))
-	var xs: Array[float] = []
-	for i in 10:
-		var j := rng.randi_range(0, candidates.size() - 1)
-		xs.append(candidates.pop_at(j))
-	return {"gap": gap, "xs": xs}
+	return {"at": at, "x": candidates[rng.randi_range(0, candidates.size() - 1)], "size": size,
+		"drift": drift, "phase": rng.randf_range(0.0, TAU), "fall": rng.randf_range(3.5, 4.5), "gap": gap}
 
 
-func _rain_y(at: float) -> float:
-	return lerpf(box.position.y - RAIN_SIZE, box.end.y + RAIN_SIZE, (t - at) / 2.0)
+func _snow_pos(flake: Dictionary, now: float) -> Vector2:
+	var u: float = (now - flake["at"]) / flake["fall"]
+	var sway: float = flake["drift"] * sin(u * TAU + flake["phase"]) * sin(PI * clampf(u, 0.0, 1.0))
+	return Vector2(flake["x"] + sway, lerpf(box.position.y - 4.0, box.end.y + 4.0, u))
 
 
 # ── 二维码 ──────────────────────────────────────────────────
@@ -163,15 +172,17 @@ func tick(_dt: float) -> void:
 		sfx("spinner_burst")
 		if battle:
 			battle.shake(2.0)
-	while _rains.size() < RAIN_AT.size() and t >= RAIN_AT[_rains.size()] - WARN:
-		_rains.append(_make_rain())
-	for i in _rains.size():
-		var at: float = RAIN_AT[i]
-		if crossed(at - WARN):
-			sfx("warn")
-		if t >= at and t < at + 2.0:
-			for x in _rains[i]["xs"]:
-				hz_rect(Rect2(Vector2(x - 2.0, _rain_y(at) - 2.0), Vector2(4, 4)))
+	var count := roundi((SNOW_END - SNOW_START) / SNOW_INTERVAL)
+	while _rains.size() < count and t >= SNOW_START + _rains.size() * SNOW_INTERVAL - WARN:
+		var at := SNOW_START + _rains.size() * SNOW_INTERVAL
+		var section := floori((at - SNOW_START) / SNOW_SECTION)
+		if section >= _snow_gaps.size():
+			_snow_gaps.append(_make_gap())
+		_rains.append(_make_snow(at, _snow_gaps[section]))
+	for flake in _rains:
+		if t >= flake["at"] and t < flake["at"] + flake["fall"] and t < 15.0:
+			var size: float = flake["size"]
+			hz_rect(Rect2(_snow_pos(flake, t) - Vector2.ONE * size * 0.5, Vector2.ONE * size))
 	# 碎片：爆开后到掉出框底 10px 前都伤人
 	for n in BURSTS.size():
 		var b: float = BURSTS[n]
@@ -230,14 +241,14 @@ func _draw() -> void:
 	var pct := clampi(int((t - 1.0) / 14.0 * 100.0), 0, 100)
 	Px.text(self, Vector2(tx, box.position.y + 146.0), str(pct) + "% 完成", Color(C.WHITE, a), 12)
 	Px.text(self, Vector2(o.x + QR_N * QR_CELL + 12.0, o.y + 4.0), "停止代码：DETERMINATION_OVERFLOW", Color(C.WHITE, a), 12)
-	# 顶部落点预警与落下碎片，使用同一份缓存位置。
-	for i in _rains.size():
-		var at: float = RAIN_AT[i]
-		for x in _rains[i]["xs"]:
-			if t >= at - WARN and t < at:
-				draw_line(Vector2(x, box.position.y), Vector2(x, box.position.y + 10), C.RED, 2.0)
-			elif t >= at and t < at + 2.0:
-				draw_rect(Rect2(Vector2(x - 2.0, _rain_y(at) - 2.0).round(), Vector2(4, 4)), Color(C.WHITE, a))
+	# 连续雪花：轻微左右摆动、不同下落速度，不再整批同时落下。
+	for flake in _rains:
+		if t >= flake["at"] - WARN and t < flake["at"]:
+			draw_line(Vector2(flake["x"], box.position.y), Vector2(flake["x"], box.position.y + 5.0), Color(C.COLD, 0.65), 1.0)
+		elif t >= flake["at"] and t < flake["at"] + flake["fall"]:
+			var size: float = flake["size"]
+			var pos := _snow_pos(flake, t)
+			draw_rect(Rect2((pos - Vector2.ONE * size * 0.5).round(), Vector2.ONE * size), Color(C.WHITE, a))
 	# 碎片
 	for n in BURSTS.size():
 		var b: float = BURSTS[n]

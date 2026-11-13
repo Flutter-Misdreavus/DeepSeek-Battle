@@ -1,9 +1,9 @@
 extends Attack
-## 知识蒸馏：教师鲸鱼逐代分裂，小鲸鱼以有限转向的鱼群运动追踪玩家。
+## 知识蒸馏：三波、最后一波双教师，逐代分裂出有限转向的追踪鱼群。
 ## 所有个体读取同一份快照；固定 1/120 拍子步保证帧率与暂停不改变分裂时序。
 
-const WAVE_START := [0.0, 8.0]
-const FIRST_SPLIT := [2.5, 10.5]
+const WAVE_START := [0.0, 8.0, 16.0]
+const FIRST_SPLIT := [2.5, 10.5, 18.5]
 const WIDTHS := [48, 32, 24, 16]
 const SPEEDS := [0.0, 30.0, 34.0, 38.0]
 const DELTAS := [0.0, deg_to_rad(55.0), deg_to_rad(28.0), deg_to_rad(14.0)]
@@ -22,7 +22,7 @@ var _simulated := 0.0
 
 
 func setup() -> void:
-	duration = 17.0
+	duration = 25.0
 	box_size = Vector2(220, 140)
 	stop_beat = 8.0
 	_tree.clear()
@@ -42,17 +42,23 @@ func _build() -> void:
 		return
 	_built = true
 	var c := box.get_center()
-	for wave in 2:
-		var p0 := Vector2(c.x, box.position.y - 30.0)
-		var p1 := Vector2(c.x, box.position.y + 30.0)
-		var heading := PI / 2.0
-		if wave == 1:
-			p0 = Vector2(box.end.x + 30.0, c.y - 10.0) if mirror else Vector2(box.position.x - 30.0, c.y - 10.0)
-			p1 = Vector2(box.end.x - 34.0, c.y - 10.0) if mirror else Vector2(box.position.x + 34.0, c.y - 10.0)
-			heading = PI if mirror else 0.0
-		_tree.append({"gen": 0, "width": WIDTHS[0], "wave": wave, "p0": p0, "p1": p1,
-			"pos": p0, "heading": heading, "birth": WAVE_START[wave], "split": FIRST_SPLIT[wave],
-			"gone": false, "split_done": false})
+	for wave in WAVE_START.size():
+		for teacher in (2 if wave == 2 else 1):
+			var p0 := Vector2(c.x, box.position.y - 30.0)
+			var p1 := Vector2(c.x, box.position.y + 30.0)
+			var heading := PI / 2.0
+			if wave == 1:
+				p0 = Vector2(box.end.x + 30.0, c.y - 10.0) if mirror else Vector2(box.position.x - 30.0, c.y - 10.0)
+				p1 = Vector2(box.end.x - 34.0, c.y - 10.0) if mirror else Vector2(box.position.x + 34.0, c.y - 10.0)
+				heading = PI if mirror else 0.0
+			elif wave == 2:
+				# 第三波两位教师同时入场，各自独立完成三级分裂。
+				var x := box.position.x + box.size.x * (0.25 if teacher == 0 else 0.75)
+				p0 = Vector2(x, box.position.y - 30.0)
+				p1 = Vector2(x, box.position.y + 30.0)
+			_tree.append({"gen": 0, "width": WIDTHS[0], "wave": wave, "p0": p0, "p1": p1,
+				"pos": p0, "heading": heading, "birth": WAVE_START[wave], "split": FIRST_SPLIT[wave],
+				"gone": false, "split_done": false})
 
 
 func _alive(n: Dictionary, now: float) -> bool:
@@ -189,7 +195,7 @@ func tick(_dt: float) -> void:
 	while _simulated + STEP <= t + 0.000001:
 		_step(_simulated + STEP, STEP)
 		_simulated += STEP
-	for wave in 2:
+	for wave in WAVE_START.size():
 		if crossed(WAVE_START[wave]):
 			pose("summon")
 			sfx("whale", 0.7)
@@ -199,7 +205,11 @@ func tick(_dt: float) -> void:
 
 
 func _caption() -> String:
-	var s0: float = FIRST_SPLIT[1] if t >= WAVE_START[1] else FIRST_SPLIT[0]
+	var wave := 0
+	for i in WAVE_START.size():
+		if t >= WAVE_START[i]:
+			wave = i
+	var s0: float = FIRST_SPLIT[wave]
 	var stage := 0
 	if t >= s0:
 		stage = 1

@@ -9,6 +9,7 @@ extends Attack
 ## - 正在下落的格子才伤人（10×10）；落地那一帧也算「正在下落」，之后变成地面。
 ## - mirror = true：列号与拼块形状同时水平镜像。
 
+const TEMPO := 0.7                       # 整段出场、下落和消行均减速30%
 const COLS := 10
 const ROWS := 12
 const CELL := 12.0
@@ -48,6 +49,7 @@ var _shatter_cells: Array = []
 
 
 func setup() -> void:
+	speed *= TEMPO
 	duration = 18.0
 	box_size = Vector2(120, 144)
 	soul_mode = "blue"
