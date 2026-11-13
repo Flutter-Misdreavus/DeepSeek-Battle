@@ -29,8 +29,7 @@ SECTIONS = {
     "p3": (140, 32, True, 64, "hard"),
     "final": (150, 160, False, 60, "hard"),
     "gameover": (72, 16, False, 57, "soft"),
-    "spare": (92, 48, False, 62, "major"),
-    "kill": (70, 40, False, 61, "dark"),
+    "ending": (80, 64, True, 57, "soft"),   # 两个结局共用
 }
 
 MINOR = [0, -4, -9, -2]          # i  VI  III  VII  (offsets of chord roots)

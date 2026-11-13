@@ -2,17 +2,17 @@
 """Cut the generated soundtrack (MiniMax Music 3 takes) into game sections.
 
 Put the chosen take of each track in assets/audio/gen/<name>.<mp3|wav|flac>
-(names: title p1 p2 p3 final gameover spare kill), then run from the repo root:
+(names: title p1 p2 p3 final gameover ending), then run from the repo root:
     python3 -I pipeline/cut_gen_music.py            # all tracks found
     python3 -I pipeline/cut_gen_music.py p2 final   # only these
 
 For every track the tempo and the beat grid are measured (librosa beat tracking,
 then a least-squares line through the beat times so the grid does not drift).
-- Looping tracks (title p1 p2 p3): the loop is a whole number of 4-beat bars
+- Looping tracks (title p1 p2 p3 ending): the loop is a whole number of 4-beat bars
   whose start and end sound most alike (chroma + loudness), joined with a
   10 ms crossfade.  p1 also yields "intro" = its first 32 beats, which the
   opening chat scene plays before the battle loop starts.
-- One-shot tracks (final gameover spare kill): from the first beat to the end,
+- One-shot tracks (final gameover): from the first beat to the end,
   trailing silence trimmed.
 Output: game/audio/music/<section>.wav and sections.json (per-section "bpm").
 """
@@ -38,9 +38,9 @@ OUT = ROOT / "game" / "audio" / "music"
 SR = 44100
 GAIN_PEAK = 0.89
 XFADE = int(0.010 * SR)
-LOOPING = {"title", "p1", "p2", "p3"}
-ORDER = ["title", "p1", "p2", "p3", "final", "gameover", "spare", "kill"]
-HINT_BPM = {"title": 84, "p1": 110, "p2": 124, "p3": 140, "final": 150, "gameover": 72, "spare": 92, "kill": 70}   # 提示词里写的速度
+LOOPING = {"title", "p1", "p2", "p3", "ending"}
+ORDER = ["title", "p1", "p2", "p3", "final", "gameover", "ending"]
+HINT_BPM = {"title": 84, "p1": 110, "p2": 124, "p3": 140, "final": 150, "gameover": 72, "ending": 80}   # 提示词里写的速度
 INTRO_BEATS = 32
 
 

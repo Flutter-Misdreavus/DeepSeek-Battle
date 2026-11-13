@@ -267,7 +267,7 @@ static func finale(b, route: String) -> void:
 
 # ── 击杀结局 ────────────────────────────────────────────────
 static func kill_ending(b) -> void:
-	Conductor.play("kill")
+	Conductor.play("ending")
 	b.overlay.flash = 1.0
 	b.hud.visible = false
 	b.box.visible = false
@@ -337,7 +337,7 @@ static func spare_ending(b) -> void:
 	Sfx.play("spare")
 	b.bg.mode = "grid"
 	b.frame.cracks = 0
-	Conductor.play("spare")
+	Conductor.play("ending")
 	b.enemy.set_idle("curtsy")
 	await b.wait(1.2)
 	if b.spare_touched:
