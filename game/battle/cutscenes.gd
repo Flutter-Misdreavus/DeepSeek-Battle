@@ -37,15 +37,13 @@ static func intro(b) -> void:
 	advanced = await ui.type_msg(1, 14.0, "voice_red")
 	await ui.wait_line(2.0 * Conductor.spb, advanced)
 	Sfx.play("glitch")
-	var glitch_start := Conductor.beat
-	var next_glitch := glitch_start + 1.0
-	while Conductor.beat < glitch_start + 6.0:
-		var bt := Conductor.beat
-		ui.glitch = clampf((bt - glitch_start) / 6.0, 0.0, 1.0)
-		while next_glitch <= bt:
-			Sfx.play("glitch")
-			next_glitch += 1.0
-		await b.get_tree().process_frame
+	var glitch_tween: Tween = b.create_tween()
+	glitch_tween.tween_property(ui, "glitch", 1.0, 1.0)
+	var next_glitch := Conductor.spb
+	while next_glitch < 1.0:
+		glitch_tween.parallel().tween_callback(func(): Sfx.play("glitch")).set_delay(next_glitch)
+		next_glitch += Conductor.spb
+	await glitch_tween.finished
 	ui.glitch = 1.0
 	Sfx.play("slam")
 	b.overlay.flash = 1.0
