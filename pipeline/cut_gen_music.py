@@ -52,6 +52,9 @@ LOOP_RANGE = {
     "p3": (96, 128, 248, (96, 112, 128, 144)),
     "ending": (0, 8, 76, (64, 72)),
 }
+# 一次性曲子从第几拍开始用（终局：让第 128 拍的大重击落在终局第 6 拍「窗口碎掉」上；
+# 这样第 180–191 拍的安静段正好是「鲸吞」在肚子里，第 192 拍的高潮重击正好是吐出来，Ctrl+A 的连按落在 196–208 拍的重击上）
+ONESHOT_START = {"final": 122}
 LONG_XFADE = {"title": 0.5, "ending": 0.5}   # 接缝分数低的安静曲子用长一点的交叉淡化（秒）
 AUDIO_EXT = {".mp3", ".wav", ".flac", ".ogg", ".m4a"}
 
@@ -190,12 +193,12 @@ def main() -> None:
                                              "loop": False, "first_beat_in_clip": 0.0, "source": files[0].name}
                 info += f" + intro 0-{INTRO_BEATS}"
         else:
-            a = int(max(0.0, t0) * SR)
+            a = int(max(0.0, t0 + ONESHOT_START.get(name, 0) * spb) * SR)
             clip = trim_tail(audio[a:])
             write(name, clip)
             meta["sections"][name] = {"bpm": round(bpm, 3), "beats": int(len(clip) / SR / spb), "length_sec": len(clip) / SR,
                                       "loop": False, "first_beat_in_clip": 0.0, "source": files[0].name}
-            info = f"one-shot {len(clip) / SR:.1f}s"
+            info = f"one-shot from beat {ONESHOT_START.get(name, 0)}, {len(clip) / SR:.1f}s"
         print(f"{name:9s} {bpm:7.2f} BPM  beat0 {t0:6.3f}s  grid {gscore:.3f}  {info}")
         print(f"          每小节响度 {bar_levels(mono, t0, spb)}")
     meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
