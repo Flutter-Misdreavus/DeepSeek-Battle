@@ -192,7 +192,7 @@ func enter_phase(n: int, quick := false) -> void:
 	Conductor.play(P["music"])
 	Conductor.set_lowpass(P["lowpass"])
 	bg.mode = P["bg"]
-	bg.spread = 0.35 if n == 2 else 0.0
+	bg.seep = 1.0 if n == 2 else 0.0
 	bg.params["temperature"] = P["temperature"]
 	frame.cracks = 3 if n == 3 else 0
 	_save()

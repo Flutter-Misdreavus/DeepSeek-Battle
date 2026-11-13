@@ -1,5 +1,5 @@
 extends Node2D
-## 最上层的全屏效果（在标题栏下面）。绘制顺序：插图 → 黑幕 → VN 对白 → LOVE / 光标 / 红心 → 白闪
+## 最上层的全屏效果（在标题栏下面）。绘制顺序：插图 → 黑幕 → VN 对白 → 温度滑杆 / 光标 / 红心 → 白闪
 ##   fade      黑幕透明度 0..1（fade_col 可改颜色）
 ##   flash     白闪透明度 0..1
 ##   cut-in    全屏插图（res://art/cutin/<名字>.png，按「铺满」缩放，可淡入、放大）
@@ -31,8 +31,8 @@ var _vn_voice := "voice_blue"
 var _vn_last := 0
 var _half := {}
 # 画在黑幕/插图上面的东西（转场、失败用）
-var love_k := -1.0                 # ≥ 0 时在 love_pos 画「Level Of ViolencE」⇄「LOVE」（Fx.love_acronym）
-var love_pos := Vector2(320, 300)
+var temp_k := -1.0                 # < 0 不画；否则是滑杆显示的温度值
+var temp_pos := Vector2(320, 300)  # 滑杆面板中心
 var cursor_pos = null              # 不为 null 时画 MV 的像素光标（箭尖位置）
 var cursor_col := C.WHITE
 var heart_pos = null               # 不为 null 时画红心（失败时：在黑幕上面碎掉）
@@ -172,14 +172,35 @@ func _draw() -> void:
 		draw_rect(full, Color(fade_col, fade))
 	if vn_on:
 		_draw_vn(full)          # VN 画在插图和黑幕上面（失败画面、HP 归零时都要看得见）
-	if love_k >= 0.0:
-		Fx.love_acronym(self, love_pos, 24, love_k)
+	if temp_k >= 0.0:
+		_draw_temp()
 	if cursor_pos != null:
 		Px.cursor(self, cursor_pos, cursor_col)
 	if heart_pos != null:
 		_draw_heart_break()
 	if flash > 0.0:
 		draw_rect(full, Color(1, 1, 1, flash))
+
+
+## 转场里的温度滑杆：面板、滑轨、滑块、数值
+func _draw_temp() -> void:
+	var edge := C.WHITE if temp_k < 1.5 else C.RED
+	var tl := temp_pos - Vector2(110, 20)
+	var panel := Rect2(tl, Vector2(220, 40))
+	draw_rect(panel, Color(0, 0, 0, 0.85))
+	Px.frame(self, panel, 1, edge)
+	Px.text(self, tl + Vector2(8, 14), "temperature", C.GRAY)
+	var track := Rect2(tl + Vector2(90, 19), Vector2(80, 2))
+	draw_rect(track, C.GRAY_DIM)
+	var knob := temp_knob()
+	draw_rect(Rect2(knob - Vector2(3, 6), Vector2(6, 12)), edge)
+	Px.text(self, tl + Vector2(176, 8), "%.1f" % temp_k, edge, 24)
+
+
+## 滑块中心（转场里让光标跟着它）
+func temp_knob() -> Vector2:
+	var tl := temp_pos - Vector2(110, 20)
+	return Vector2(tl.x + 90.0 + 80.0 * temp_k / 2.0, tl.y + 20.0)
 
 
 func _draw_vn(full: Rect2) -> void:

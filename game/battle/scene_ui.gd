@@ -1,5 +1,6 @@
 extends Node2D
-## 过场专用绘制节点：聊天界面（mode = "chat"）和结束卡（mode = "card"）。
+## 过场专用绘制节点：聊天界面（mode = "chat"）、结束卡（mode = "card"）、
+## 鲸落（mode = "fall"）、鲸鱼送行（mode = "escort"）。
 ## 由 cutscenes.gd 创建并 add_child 到 battle 上，插在 overlay 下面、标题栏下面，用完 queue_free()。
 
 const CHAT_X := 120.0
@@ -19,23 +20,38 @@ var msgs: Array = []                  # {who, text, shown, col}
 var think := {"on": false, "lines": [], "shown": 0}
 var glitch := 0.0                     # 0..1
 
-# ── card ────────────────────────────────────────────────────
+# ── card / escort ────────────────────────────────────────────
 var title := ""
 var lines: Array = []
-var k := 1.0
+var k := 0.0                          # card 淡入进度；escort 绕行进度
+var leave := 0.0                      # escort 往右游出画面
 
+# ── fall ────────────────────────────────────────────────────
+var fall := 0.0                       # 巨鲸下沉进度 0..1
+var caption_a := 0.0                  # 字幕透明度
+
+var _snow: Array = []
+var _t := 0.0
 var _rows: Array = []                 # 本帧已经画出的文字行，故障时按横带重画
 
 
-func _process(_dt: float) -> void:
+func _process(dt: float) -> void:
+	_t += dt
+	if mode == "fall":
+		_update_snow(dt)
 	queue_redraw()
 
 
 func _draw() -> void:
-	if mode == "card":
-		_draw_card()
-	else:
-		_draw_chat()
+	match mode:
+		"card":
+			_draw_card()
+		"fall":
+			_draw_fall()
+		"escort":
+			_draw_escort()
+		_:
+			_draw_chat()
 
 
 func _offset() -> Vector2:
@@ -170,6 +186,52 @@ func _draw_glitch(bands: Array) -> void:
 			var rh: float = r["h"]
 			if ry < by + bh and ry + rh > by:
 				Px.text(self, Vector2(float(r["x"]) + dx, ry), str(r["text"]), r["col"])
+
+
+# ════════════════════════════════════════════════════════════
+# 鲸落
+# ════════════════════════════════════════════════════════════
+
+func _update_snow(dt: float) -> void:
+	var off := _offset()
+	var full := Rect2(-off, get_viewport_rect().size)
+	if _snow.is_empty():
+		for _i in 40:
+			_snow.append({"p": Vector2(randf_range(full.position.x, full.end.x), randf_range(full.position.y, full.end.y)), "v": randf_range(8.0, 16.0), "ph": randf_range(0.0, TAU), "amp": randf_range(1.0, 3.0)})
+	for s in _snow:
+		var p: Vector2 = s["p"]
+		p.y += float(s["v"]) * dt
+		if p.y > full.end.y:
+			p = Vector2(randf_range(full.position.x, full.end.x), full.position.y - randf_range(0.0, 20.0))
+		s["p"] = p
+
+
+func _draw_fall() -> void:
+	Whale.draw(self, Vector2(320 + 20 * sin(fall * 3.0), lerpf(-140.0, 300.0, fall)), Vector2(1, 0.7), 240, Color(C.SYS_DIM, 0.85))
+	for s in _snow:
+		var p: Vector2 = s["p"]
+		var x := p.x + sin(_t * 1.2 + float(s["ph"])) * float(s["amp"])
+		draw_rect(Rect2(Vector2(x, p.y).round(), Vector2(1, 1)), Color(C.WHITE, 0.5))
+	var text := "一鲸落，万物生。"
+	var w := Px.text_w(text)
+	Px.text(self, Vector2(roundf(320.0 - w / 2.0), 320), text, Color(C.GRAY, caption_a))
+
+
+# ════════════════════════════════════════════════════════════
+# 鲸鱼送行
+# ════════════════════════════════════════════════════════════
+
+func _draw_escort() -> void:
+	var c := C.STAGE_FOOT + Vector2(0, -C.STAGE_H * 0.55)
+	for i in 5:
+		var a := TAU * i / 5.0 + k * TAU
+		var r := 50.0 + 12.0 * (i % 2)
+		var p := c + Vector2(cos(a) * r, sin(a) * r * 0.5)
+		var dir := Vector2(-sin(a) * r, cos(a) * r * 0.5).normalized()
+		if leave > 0.0:
+			p += Vector2(leave * leave * 420.0, -leave * 30.0)
+			dir = dir.lerp(Vector2(1, 0), leave).normalized()
+		Whale.draw(self, p, dir, 16, C.WHITE)
 
 
 # ════════════════════════════════════════════════════════════
