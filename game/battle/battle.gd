@@ -101,7 +101,7 @@ func _main() -> void:
 	if j == "":
 		await Cutscenes.intro(self)
 		await enter_phase(1, true)
-		flavor_i = 0          # 第一回合的旁白是「* DeepSeek娘 拒绝了你的请求。」
+		flavor_i = 0          # 第一回合的旁白是「* Deepseek 拒绝了你的请求。」
 	else:
 		await _jump(j)
 	if _finished or not is_inside_tree():
@@ -244,7 +244,7 @@ func _player_turn() -> String:
 	var P: Dictionary = Story.PHASES[phase]
 	var flavor: String = P["flavor"][flavor_i % P["flavor"].size()]
 	if spare_ready:
-		flavor = "* DeepSeek娘 跪在地上。\n* 她不再攻击了。"
+		flavor = "* Deepseek 跪在地上。\n* 她不再攻击了。"
 	flavor_i += 1
 	hud.start_typing(flavor)
 	if auto != "":
@@ -254,7 +254,7 @@ func _player_turn() -> String:
 		var b := await hud.pick_button()
 		match b:
 			0:
-				var t := await hud.pick_option(["DeepSeek娘"], 1, _name_col())
+				var t := await hud.pick_option(["Deepseek"], 1, _name_col())
 				if t < 0:
 					hud.start_typing(flavor, C.WHITE, false)
 					continue
@@ -262,7 +262,7 @@ func _player_turn() -> String:
 				await do_fight(acc)
 				return "fight"
 			1:
-				var t := await hud.pick_option(["DeepSeek娘"], 1, _name_col())
+				var t := await hud.pick_option(["Deepseek"], 1, _name_col())
 				if t < 0:
 					hud.start_typing(flavor, C.WHITE, false)
 					continue
@@ -640,7 +640,7 @@ func _kill_route() -> bool:
 		box.morph(C.TEXT_BOX, 0.25)
 		hud.btn_dead = [false, true, true, true]
 		hud.btn_sel = 0
-		hud.start_typing("* DeepSeek娘 跪在地上。\n* 只剩一个按钮还有反应。")
+		hud.start_typing("* Deepseek 跪在地上。\n* 只剩一个按钮还有反应。")
 		if auto == "":
 			await hud.pick_button()
 		else:

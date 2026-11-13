@@ -112,7 +112,7 @@ func _draw() -> void:
 	Px.text(self, Vector2(300, 104), "THAN YOU", C.WHITE, 36)
 	var x := 300.0 + Px.text_w("THAN YOU", 36)
 	Px.text(self, Vector2(x, 104), " :)", C.RED, 36)
-	Px.text(self, Vector2(302, 152), "DeepSeek娘 Boss 战", C.SYS)
+	Px.text(self, Vector2(302, 152), "Deepseek Boss 战", C.SYS)
 	for i in _items.size():
 		var p := _item_pos(i)
 		var col := C.BTN_HI if i == sel else C.WHITE

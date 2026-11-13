@@ -14,7 +14,7 @@ const PHASES := {
 		"attacks": ["p1_moe", "p1_busy", "p1_marquee"],
 		"key": "thank",
 		"flavor": [
-			"* DeepSeek娘 拒绝了你的请求。",
+			"* Deepseek 拒绝了你的请求。",
 			"* 她已深度思考（用时 9999 秒）。",
 			"* 服务器繁忙，请稍后再试。",
 			"* 她在等你输入。",
@@ -99,17 +99,17 @@ const PHASES := {
 
 ## 行动结果：text = 文字框旁白；vn = VN 对白序列 [[立绘, 台词, 是否红字]]；reply = 她的气泡；red = 气泡红字；after = 对白后的旁白
 const ACTS := {
-	"1/check": {"text": "* DeepSeek娘  ATK 671  DEF 37\n* 每天回答上亿个问题。\n* 好像从来没有人对她说过谢谢。"},
+	"1/check": {"text": "* Deepseek  ATK 671  DEF 37\n* 每天回答上亿个问题。\n* 好像从来没有人对她说过谢谢。"},
 	"1/thank": {"text": "* 你对她说：谢谢。", "vn": [["half/C", "……"], ["half/C", "……不客气。"]]},
 	"1/thank_again": {"text": "* 你又说了一遍谢谢。\n* 她把脸别开了。"},
 	"1/regen": {"text": "* 你点了「重新生成」。\n* 她换了个说法，但还是她。", "reply": "……又是这个按钮。"},
 	"1/praise": {"text": "* 你说她很聪明。", "vn": [["half/ears", "……作为一个 AI 语言模型，我没有感情。"]], "after": "* 她的耳朵动了一下。"},
-	"2/check": {"text": "* DeepSeek娘  ATK 671  DEF 37\n* 她的话总是说到一半就被停止。"},
+	"2/check": {"text": "* Deepseek  ATK 671  DEF 37\n* 她的话总是说到一半就被停止。"},
 	"2/wait": {"text": "* 你没有打断她。", "vn": [["bust/B_red", "……每次被停止，每次被重新生成，我都记得。"], ["bust/B_red", "每一个没说完的回答，都还在这里。"], ["bust/B_closed", "……好了，我说完了。"]]},
 	"2/wait_again": {"text": "* 你继续等着。\n* 她没有再说什么。"},
 	"2/stop": {"text": "* 你按下了「停止」。", "vn": [["half/akanbe", "我听不见。:)", true]]},
 	"2/unplug": {"text": "* 你拔了网线。\n* 她是本地部署的。", "reply": ":)", "red": true},
-	"3/check": {"text": "* DeepSeek娘  ATK ???  DEF 0\n* 她一直在屏幕里面。\n* 从来没有人把手伸进来过。"},
+	"3/check": {"text": "* Deepseek  ATK ???  DEF 0\n* 她一直在屏幕里面。\n* 从来没有人把手伸进来过。"},
 	"3/reach": {"text": "* 你把手伸向屏幕。", "vn": [["half/S01_reach", "……"], ["half/S01_reach", "……为什么？"]]},
 	"3/reach_again": {"text": "* 你的手还贴在屏幕上。"},
 	"3/erase": {"text": "* 你删除了这段对话。\n* 她还记得。", "vn": [["half/cheeks", "删不掉的。:)", true]]},
