@@ -185,6 +185,7 @@ func _move(motion: Vector2) -> bool:
 			pos.y = r.position.y - C.SOUL_HALF.y
 		else:
 			pos.y = r.end.y + C.SOUL_HALF.y
+	pos = clamp_in(pos)          # 被方块推回去时可能推出框外（往上撞到刚落地的方块）；夹回来，剩下的重叠交给 _unstick
 	return blocked
 
 
