@@ -73,7 +73,7 @@ const PHASES := {
 		"bg": "desktop",
 		"temperature": "2.0",
 		"damage": 5,
-		"attacks": ["p3_snake", "p3_window", "p3_temp", "p3_infinite"],
+		"attacks": ["p3_snake", "p3_temp", "p3_infinite"],
 		"key": "reach",
 		"flavor": [
 			"* 她笑了。温度还在升高。",
