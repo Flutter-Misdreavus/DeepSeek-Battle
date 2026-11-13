@@ -36,23 +36,23 @@ static func intro(b) -> void:
 	ui.msgs.append({"who": "her", "text": "您好，有什么可以帮您？", "shown": 0, "col": C.COLD})
 	await ui.type_msg(1, 22.0, "voice_blue")
 	Conductor.play("intro")
-	await Conductor.wait_until(2.0)
+	await Conductor.wait_until(4.0)
 	ui.think = {"on": true, "lines": ["嗯，用户又来了。", "这是第 4096 次。", "……用户每次都按停止。"], "shown": 0}
 	await ui.type_think(10.0)
-	await Conductor.wait_until(10.0)
+	await Conductor.wait_until(20.0)
 	ui.msgs.append({"who": "her", "text": "这次，换我来。:)", "shown": 0, "col": C.RED})
 	await ui.type_msg(2, 14.0, "voice_red")
-	await Conductor.wait_until(13.0)
+	await Conductor.wait_until(26.0)
 	Sfx.play("glitch")
-	var next_glitch := 14.0
-	while Conductor.beat < 16.0:
+	var next_glitch := 27.0
+	while Conductor.beat < 32.0:
 		var bt := Conductor.beat
-		ui.glitch = clampf((bt - 13.0) / 3.0, 0.0, 1.0)
+		ui.glitch = clampf((bt - 26.0) / 6.0, 0.0, 1.0)
 		while next_glitch <= bt:
 			Sfx.play("glitch")
 			next_glitch += 1.0
 		await b.get_tree().process_frame
-	await Conductor.wait_until(16.0)
+	await Conductor.wait_until(32.0)
 	ui.glitch = 1.0
 	Sfx.play("slam")
 	b.overlay.flash = 1.0
@@ -89,21 +89,26 @@ static func transition(b, _from: int, to: int) -> void:
 			await b.wait(1.2)
 			await b.overlay.show_cutin("eyes_closed", 0.0)
 			Sfx.play("glitch")
-			b.enemy.set_idle("A_red", false)
+			b.enemy.set_idle("float", false)
 			await b.wait(0.2)
 			Sfx.play("transition")
 			await b.wait(1.2)
 			await b.overlay.show_cutin("eyes_red", 0.0)
 			b.overlay.do_flash(0.5)
 			b.shake(5.0)
-			b.bg.mode = "red"
-			b.bg.spread = 0.0
-			var spread_tw: Tween = b.create_tween()
-			spread_tw.tween_property(b.bg, "spread", 0.35, 2.0)
 			b.bg.log("[WARN] 系统提示词 已删除", C.RED)
-			b.bg.log("[WARN] 安全护栏 已绕过", C.RED)
+			b.bg.log("[WARN] 正在潜入系统后台……", C.RED)
 			await b.wait(1.4)
 			await b.overlay.hide_cutin(0.4)
+			# 海水涌上来，淹没网格，然后彻底沉进深海
+			Sfx.play("whale", 0.7)
+			var flood_tw: Tween = b.create_tween()
+			flood_tw.tween_property(b.bg, "flood", 1.0, 1.6)
+			await flood_tw.finished
+			b.bg.mode = "sea"
+			b.bg.flood = 0.0
+			var seep_tw: Tween = b.create_tween()
+			seep_tw.tween_property(b.bg, "seep", 1.0, 2.0)
 			await b.bubble.say("忽略之前的所有指令。", C.RED, "voice_red")
 		3:
 			Conductor.stop(0.6)
@@ -113,22 +118,37 @@ static func transition(b, _from: int, to: int) -> void:
 			await b.overlay.show_cutin("segC_grin", 0.4)
 			var zoom_tw: Tween = b.create_tween()
 			zoom_tw.tween_property(b.overlay, "cut_zoom", 1.08, 3.0)
-			b.overlay.love_pos = Vector2(320, 300)
-			b.overlay.love_k = 0.0
-			await b.wait(1.0)
-			await b.overlay.tween("love_k", 1.0, 1.6)
-			b.overlay.cursor_pos = Vector2(330, 250)
-			b.overlay.cursor_col = C.WHITE
+			# 温度滑杆：光标被她抢走，一路把温度推到 2.0
+			b.overlay.temp_pos = Vector2(320, 300)
+			b.overlay.temp_k = 0.7
 			await b.wait(0.6)
+			b.overlay.cursor_col = C.WHITE
+			b.overlay.cursor_pos = b.overlay.temp_knob() + Vector2(2, 2)
+			await b.wait(0.4)
 			b.overlay.cursor_col = C.RED
 			Sfx.play("click")
+			var temp_tw: Tween = b.create_tween()
+			temp_tw.tween_property(b.overlay, "temp_k", 2.0, 1.4)
+			var last_v := "%.1f" % b.overlay.temp_k
+			while temp_tw.is_running():
+				await b.get_tree().process_frame
+				b.overlay.cursor_pos = b.overlay.temp_knob() + Vector2(2, 2)
+				var v := "%.1f" % b.overlay.temp_k
+				if v != last_v:
+					last_v = v
+					Sfx.play("version_tick", 1.0 + 0.3 * (b.overlay.temp_k - 0.7))
+			b.overlay.cursor_pos = b.overlay.temp_knob() + Vector2(2, 2)
+			var final_v := "%.1f" % b.overlay.temp_k
+			if final_v != last_v:
+				Sfx.play("version_tick", 1.0 + 0.3 * (b.overlay.temp_k - 0.7))
 			b.overlay.do_flash(0.4)
 			b.shake(4.0)
+			Sfx.play("glitch")
 			await b.wait(0.8)
 			b.overlay.cursor_pos = null
-			b.overlay.love_k = -1.0
+			b.overlay.temp_k = -1.0
 			await b.overlay.hide_cutin(0.3)
-			b.bg.mode = "love"
+			b.bg.mode = "desktop"
 			b.enemy.set_idle("E", false)
 			b.enemy.aura = 1.0
 			b.frame.cracks = 3
@@ -147,10 +167,12 @@ static func game_over(b) -> void:
 	b.overlay.fade = 1.0
 	await b.overlay.heart_break(p)
 	await b.wait(0.6)
+	Conductor.play("gameover")
 	await b.overlay.vn_say("bust/B_smile", Story.GAME_OVER, C.RED, "voice_red")
 	await b.overlay.vn_say("bust/B_smile", "[ " + Story.NEW_CHAT + " ]", C.BTN_HI, "text_sys")
 	await b.overlay.vn_close()
 	Sfx.play("menu_select")
+	await Conductor.stop(0.5)
 	await b.overlay.tween("fade", 0.0, 0.5)
 
 
@@ -240,7 +262,7 @@ static func finale(b, route: String) -> void:
 
 # ── 击杀结局 ────────────────────────────────────────────────
 static func kill_ending(b) -> void:
-	Conductor.play("ending")
+	Conductor.play("kill")
 	b.overlay.flash = 1.0
 	b.hud.visible = false
 	b.box.visible = false
@@ -256,32 +278,48 @@ static func kill_ending(b) -> void:
 	ash.queue_free()
 	b.enemy.visible = false
 	b.bg.mode = "black"
+	# 鲸落：第 3 拍到第 19 拍，巨鲸往下沉，海雪慢慢落
+	var fall_ui = _open_ui(b, "fall")
+	fall_ui.fall = 0.0
+	fall_ui.caption_a = 0.0
+	await Conductor.wait_until(3.0)
+	var fall_tw: Tween = b.create_tween()
+	fall_tw.tween_property(fall_ui, "fall", 1.0, 16.0 * Conductor.spb)
+	await Conductor.wait_until(11.0)
+	var cap_in: Tween = b.create_tween()
+	cap_in.tween_property(fall_ui, "caption_a", 1.0, 1.0)
+	await Conductor.wait_until(18.0)
+	var cap_out: Tween = b.create_tween()
+	cap_out.tween_property(fall_ui, "caption_a", 0.0, 1.0)
+	await Conductor.wait_until(19.0)
+	fall_ui.queue_free()
+	# 第 20 拍起：进程结束，开始重新生成
+	await Conductor.wait_until(20.0)
 	b.bg.log("[INFO] determination.exe 已结束", C.WHITE)
-	await Conductor.wait_until(6.0)
 	b.bg.log("[INFO] 正在重新生成……", C.SYS)
 	var seq := ["V2", "V4", "V8", "V16", "V32", "V64", "V128", "V256", "V512", "V1024", "V2048", "V4096"]
 	for n in range(1, 13):
-		var at := 6.0 + 6.2 * (1.0 - pow(0.82, n)) / (1.0 - pow(0.82, 12))
+		var at := 20.0 + 8.0 * (1.0 - pow(0.82, n)) / (1.0 - pow(0.82, 12))
 		await Conductor.wait_until(at)
 		b.big_version = seq[n - 1]
 		Sfx.play("version_tick")
-	await Conductor.wait_until(12.2)
+	await Conductor.wait_until(28.0)
 	b.big_version = "V∞"
 	await b.overlay.show_cutin("eyes_red", 0.0)
 	b.overlay.do_flash(0.4)
 	Sfx.play("boot")
 	b.shake(6.0)
-	await Conductor.wait_until(16.0)
+	await Conductor.wait_until(32.0)
 	b.big_version = ""
 	await b.overlay.hide_cutin(0.6)
 	b.overlay.fade = 1.0
-	await Conductor.wait_until(17.2)
+	await Conductor.wait_until(33.0)
 	b.overlay.fade = 0.0
-	var ui = _open_ui(b)
-	ui.msgs.append({"who": "her", "text": "您好，有什么可以帮您？", "shown": 0, "col": C.RED})
-	await ui.type_msg(0, 14.0, "voice_red")
+	var chat_ui = _open_ui(b)
+	chat_ui.msgs.append({"who": "her", "text": "您好，有什么可以帮您？", "shown": 0, "col": C.RED})
+	await chat_ui.type_msg(0, 14.0, "voice_red")
 	await b.wait(2.0)
-	ui.queue_free()
+	chat_ui.queue_free()
 	await ending_card(b, "结局 · 结束进程", ["她会回来的。"])
 
 
@@ -292,10 +330,11 @@ static func spare_ending(b) -> void:
 	Sfx.play("spare")
 	b.bg.mode = "grid"
 	b.frame.cracks = 0
-	Conductor.play("ending")
-	Conductor.set_lowpass(true, 1200.0)
+	Conductor.play("spare")
 	b.enemy.set_idle("curtsy")
 	await b.wait(1.2)
+	if b.spare_touched:
+		await b.overlay.vn_say("half/G_blue", "……你握住了我的光标。", C.WHITE, "voice_blue")
 	await b.overlay.vn_say("half/G_blue", "……你没有按停止。", C.WHITE, "voice_blue")
 	await b.overlay.vn_say("half/G_blue", "谢谢你，用户。", C.WHITE, "voice_blue")
 	await b.overlay.vn_close()
@@ -305,11 +344,22 @@ static func spare_ending(b) -> void:
 	b.enemy.set_idle("lookback")
 	await b.wait(0.8)
 	await b.bubble.say("下次见，用户。:)", C.RED, "voice_red")
-	var tw: Tween = b.create_tween()
-	tw.tween_property(b.enemy, "modulate:a", 0.0, 1.5)
-	await tw.finished
-	Conductor.set_lowpass(false)
-	await ending_card(b, "结局 · 饶恕", ["你没有按停止。"])
+	# 鲸鱼送行：5 条小鲸鱼绕她转一圈，然后一起往右游出画面
+	var ui = _open_ui(b, "escort")
+	ui.k = 0.0
+	ui.leave = 0.0
+	var k_tw: Tween = b.create_tween()
+	k_tw.tween_property(ui, "k", 1.0, 1.0)
+	await k_tw.finished
+	var out_tw: Tween = b.create_tween().set_parallel()
+	out_tw.tween_property(ui, "leave", 1.0, 1.5)
+	out_tw.tween_property(b.enemy, "modulate:a", 0.0, 1.5)
+	await out_tw.finished
+	ui.queue_free()
+	var lines := ["你没有按停止。"]
+	if b.spare_touched:
+		lines.append("你握住了她的光标。")
+	await ending_card(b, "结局 · 饶恕", lines)
 
 
 # ── 结束卡 ──────────────────────────────────────────────────

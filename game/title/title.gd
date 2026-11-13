@@ -46,8 +46,7 @@ func _ready() -> void:
 	add_child(shade)
 	get_viewport().size_changed.connect(_layout)
 	_layout()
-	Conductor.play("p1")
-	Conductor.set_lowpass(true, 500.0)
+	Conductor.play("title")
 
 
 func _layout() -> void:
