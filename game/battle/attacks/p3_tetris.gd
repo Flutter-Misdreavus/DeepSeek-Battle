@@ -1,7 +1,7 @@
 extends Attack
 ## P3-2「上下文压缩」
 ##
-## 弹幕框变成 10×12 的俄罗斯方块竖井（每格 12px）。方块按固定表踩着拍子一块块往下掉，
+## 弹幕框变成 10×12 的俄罗斯方块竖井（每格 12px）。方块形状与位置随机，踩着拍子一块块往下掉，
 ## 蓝心要跳到落地的方块堆上躲开正在掉的方块；一行填满就闪一下消掉，最后整堆一起炸开。
 ## - 方块只直落、不左右移、不转，落点和消行全部在 setup() 里按顺序模拟好；
 ##   运行时位置只由 t 算出来（一格一格跳，不平滑移动）。
@@ -33,19 +33,16 @@ const SHAPES := {
 	"L_H": [Vector2i(2, 0), Vector2i(0, 1), Vector2i(1, 1), Vector2i(2, 1)],
 }
 
-## 出场表：[出场拍, 形状, 最左一格所在列]
-const SPAWN := [
-	[1.0, "I_H", 0], [2.0, "I_H", 4], [3.0, "O", 8],
-	[4.0, "T", 3], [5.0, "S", 6], [6.0, "Z", 4],
-	[7.0, "J_H", 0], [8.0, "L_H", 1], [9.0, "I_V", 9],
-	[10.0, "O", 7], [11.0, "T", 3], [12.0, "S", 7],
-	[13.0, "Z", 4], [14.0, "I_H", 0],
-]
+const PIECE_COUNT := 14
+const MAX_LAYOUT_TRIES := 1024            # 有限次回溯，避免生成卡住
+const RESTART_TRIES := 128                # 不在难以补齐的前缀上持续耗尽尝试
 
 var _pieces: Array = []
 var _frames: Array = []
 var _clear_events: Array = []
 var _shatter_cells: Array = []
+var _generation_attempts := 0
+var _used_fallback := false
 
 
 func setup() -> void:
@@ -58,17 +55,93 @@ func setup() -> void:
 	_frames.clear()
 	_clear_events.clear()
 	_shatter_cells.clear()
-	for item in SPAWN:
+	_generate_layout()
+
+
+func _shuffle(items: Array) -> void:
+	for i in range(items.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var item = items[i]
+		items[i] = items[j]
+		items[j] = item
+
+
+func _make_piece(kind: String, left: int) -> Dictionary:
+	var width := 0
+	for o in SHAPES[kind]:
+		width = maxi(width, o.x + 1)
+	var shape: Array[Vector2i] = []
+	for o in SHAPES[kind]:
+		shape.append(Vector2i(width - 1 - o.x, o.y) if mirror else o)
+	return {"index": _pieces.size(), "beat": float(_pieces.size() + 1), "kind": kind,
+		"col": COLS - left - width if mirror else left,
+		"top": -4, "land": INF, "cells": [], "shape": shape}
+
+
+## 逐块随机尝试合法形状和列，用同一套下落模拟验证平台可跳跃性。
+func _generate_layout() -> void:
+	var choices: Array = []
+	for kind in SHAPES:
 		var width := 0
-		for o in SHAPES[item[1]]:
+		for o in SHAPES[kind]:
 			width = maxi(width, o.x + 1)
-		var shape: Array[Vector2i] = []
-		for o in SHAPES[item[1]]:
-			shape.append(Vector2i(width - 1 - o.x, o.y) if mirror else o)
-		var col: int = COLS - item[2] - width if mirror else item[2]
-		_pieces.append({"index": _pieces.size(), "beat": item[0], "kind": item[1], "col": col,
-			"top": -4, "land": INF, "cells": [], "shape": shape})
-	_simulate()
+		for col in COLS - width + 1:
+			choices.append([kind, col])
+	var pending: Array = []
+	_generation_attempts = 0
+	_used_fallback = false
+	var restart_at := RESTART_TRIES
+	while _pieces.size() < PIECE_COUNT and _generation_attempts < MAX_LAYOUT_TRIES:
+		if _generation_attempts >= restart_at:
+			_pieces.clear()
+			pending.clear()
+			restart_at += RESTART_TRIES
+		var depth := _pieces.size()
+		if pending.size() <= depth:
+			var options := choices.duplicate()
+			_shuffle(options)
+			pending.append(options)
+		if pending[depth].is_empty():
+			pending.pop_back()
+			if depth == 0:
+				break
+			_pieces.pop_back()
+			continue
+		var choice: Array = pending[depth].pop_back()
+		_pieces.append(_make_piece(choice[0], choice[1]))
+		_generation_attempts += 1
+		if not _simulate():
+			_pieces.pop_back()
+	if _pieces.size() < PIECE_COUNT:
+		# 极端回溯耗尽时随机铺两格高的台阶，保证生成结束且平台可跳跃。
+		_used_fallback = true
+		_safe_layout()
+	var valid := _simulate()
+	assert(valid, "随机方块必须可跳跃并在全清前落地")
+
+
+func _safe_layout() -> void:
+	_pieces.clear()
+	var slots: Array = []
+	for i in PIECE_COUNT:
+		if i % 5 == 0:
+			slots = [0, 2, 4, 6, 8]
+			_shuffle(slots)
+		_pieces.append(_make_piece("O", slots.pop_back()))
+
+
+func _board_safe(board: Dictionary) -> bool:
+	var heights: Array[int] = []
+	heights.resize(COLS)
+	heights.fill(0)
+	for cell in board:
+		if cell.x < 0 or cell.x >= COLS or cell.y < 3 or cell.y >= ROWS:
+			return false
+		heights[cell.x] = maxi(heights[cell.x], ROWS - cell.y)
+	for x in COLS - 1:
+		if absi(heights[x] - heights[x + 1]) > 3:
+			return false
+	return true
 
 
 func _cells(p: Dictionary, top: int) -> Array:
@@ -106,7 +179,14 @@ func _clear_board(board: Dictionary, rows: Array[int]) -> Dictionary:
 
 
 ## 按真实时间预模拟：下落物互相阻挡时先等待，落地及延迟消行后再更新地面。
-func _simulate() -> void:
+func _simulate() -> bool:
+	_frames.clear()
+	_clear_events.clear()
+	_shatter_cells.clear()
+	for p in _pieces:
+		p["top"] = -4
+		p["land"] = INF
+		p["cells"] = []
 	var board := {}
 	var clear_at := INF
 	for step in int(SHATTER_BOOM / FALL_STEP):
@@ -114,6 +194,8 @@ func _simulate() -> void:
 		if now >= clear_at:
 			var rows := _full_rows(board)
 			board = _clear_board(board, rows)
+			if not _board_safe(board):
+				return false
 			_clear_events.append({"at": now, "rows": rows})
 			clear_at = INF
 		for p in _pieces:
@@ -139,8 +221,9 @@ func _simulate() -> void:
 			p["land"] = now
 			p["cells"] = _cells(p, p["top"])
 			for cell in p["cells"]:
-				assert(cell.y >= 0 and cell.y < ROWS, "方块不能堆出井顶")
 				board[cell] = p["index"]
+			if not _board_safe(board):
+				return false
 			if not _full_rows(board).is_empty() and clear_at == INF:
 				clear_at = now + CLEAR_FLASH
 		var tops: Array[int] = []
@@ -148,8 +231,10 @@ func _simulate() -> void:
 			tops.append(p["top"])
 		_frames.append({"board": board.duplicate(), "tops": tops, "flash": _full_rows(board)})
 	for p in _pieces:
-		assert(p["land"] < SHATTER_AT, "所有方块必须在全清前落地")
+		if p["land"] >= SHATTER_AT:
+			return false
 	_shatter_cells = board.keys()
+	return true
 
 
 func _cell_rect(cell: Vector2i) -> Rect2:

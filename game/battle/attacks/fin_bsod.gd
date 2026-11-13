@@ -7,7 +7,7 @@ extends Attack
 ## - [2, 2.5) 「(」以自身中心水平翻成「)」，过零时白变红；第 2 拍响 glitch、换 F_smile。
 ## - 二维码 21×21、每格 4px，三个角是 7×7 定位块，其余 50% 随机实心（格子够六批碎片用）。
 ## - 第 3/5/7/9/11/13 拍各从二维码里抛出一批像素碎片，碎片位置是爆开拍数的纯函数。
-## - 第3–15拍每0.25拍生成一片雪花，缓慢摆动下落；每四拍锁定一条64px安全通道。
+## - 第3–15拍每0.125拍生成一片雪花，缓慢摆动下落；每四拍锁定一条64px安全通道。
 
 const BLUE := Color("#0b56c4")
 const QR_N := 21
@@ -16,7 +16,7 @@ const QR_OFF := Vector2(48.0, 164.0)
 const BURSTS := [3.0, 5.0, 7.0, 9.0, 11.0, 13.0]
 const SNOW_START := 3.0
 const SNOW_END := 15.0
-const SNOW_INTERVAL := 0.25
+const SNOW_INTERVAL := 0.125
 const SNOW_SECTION := 4.0
 const RAIN_GAP := 64.0
 const WARN := 0.5

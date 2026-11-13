@@ -95,17 +95,17 @@ func _random_safety() -> void:
 
 
 func _cache_and_seed() -> void:
-	for id in ["p1_busy", "p1_marquee", "fin_bsod", "p1_moe"]:
+	for id in ["p1_busy", "p1_marquee", "fin_bsod", "p1_moe", "p3_tetris"]:
 		var a = _attack(id, 123)
 		var b = _attack(id, 123)
 		if a == null or b == null:
 			return
 		_battle.soul.pos = a.box.get_center()
-		a.t = {"p1_busy": 11.5, "p1_marquee": 0.0, "fin_bsod": 7.5, "p1_moe": 1.0}[id]
+		a.t = {"p1_busy": 11.5, "p1_marquee": 0.0, "fin_bsod": 7.5, "p1_moe": 1.0, "p3_tetris": 1.0}[id]
 		b.t = a.t
 		a.tick(0.0)
 		b.tick(0.0)
-		var field: String = {"p1_busy": "_centers", "p1_marquee": "_rects", "fin_bsod": "_rains", "p1_moe": "_picks"}[id]
+		var field: String = {"p1_busy": "_centers", "p1_marquee": "_rects", "fin_bsod": "_rains", "p1_moe": "_picks", "p3_tetris": "_pieces"}[id]
 		var cached = a.get(field).duplicate(true)
 		_check(cached == b.get(field), id + "：同种子同输入应复现")
 		_battle.soul.pos = a.box.position + C.SOUL_HALF
@@ -119,50 +119,68 @@ func _cache_and_seed() -> void:
 
 
 func _tetris() -> void:
-	for mirrored in [false, true]:
-		var a = load("res://battle/attacks/p3_tetris.gd").new()
-		a.mirror = mirrored
-		a.setup()
-		a.box = C.dodge_box(120, 144)
-		_check(a._pieces.size() == 14 and a.duration == 18.0 and is_equal_approx(a.speed, 0.7), "14块、内部18拍且全段减速30%")
-		for p in a._pieces:
-			_check(p["land"] < a.SHATTER_AT, "所有方块须在全清前落地")
-			var board: Dictionary = a._board_at(p["land"])
-			for cell in p["cells"]:
-				_check(board.has(cell), "落地碰撞与可站立平台一致")
-		for frame in a._frames:
-			var board: Dictionary = frame["board"]
-			if board.size() > 0:
-				var highest := 12
-				for cell in board:
-					_check(cell.x >= 0 and cell.x < 10 and cell.y >= 0 and cell.y < 12, "堆叠不能越界")
-					highest = mini(highest, cell.y)
-				_check(highest >= 3, "堆叠不能封死井顶")
-				var heights: Array[int] = []
+	var total_cleared := 0
+	var layouts := {}
+	var shapes := {}
+	var fallback_count := 0
+	for seed_value in 32:
+		for mirrored in [false, true]:
+			var a = load("res://battle/attacks/p3_tetris.gd").new()
+			a.mirror = mirrored
+			a.rng.seed = seed_value
+			a.setup()
+			a.box = C.dodge_box(120, 144)
+			fallback_count += int(a._used_fallback)
+			_check(a._pieces.size() == 14 and a.duration == 18.0 and is_equal_approx(a.speed, 0.7), "14块、内部18拍且全段减速30%")
+			for p in a._pieces:
+				_check(p["land"] < a.SHATTER_AT, "所有方块须在全清前落地")
+				var board: Dictionary = a._board_at(p["land"])
+				for cell in p["cells"]:
+					_check(board.has(cell), "落地碰撞与可站立平台一致")
+			for frame in a._frames:
+				var board: Dictionary = frame["board"]
+				if board.size() > 0:
+					var highest := 12
+					for cell in board:
+						_check(cell.x >= 0 and cell.x < 10 and cell.y >= 0 and cell.y < 12, "堆叠不能越界")
+						highest = mini(highest, cell.y)
+					_check(highest >= 3, "堆叠不能封死井顶")
+					var heights: Array[int] = []
+					for x in 10:
+						var top := 12
+						for y in 12:
+							if board.has(Vector2i(x, y)):
+								top = mini(top, y)
+						heights.append(12 - top)
+					for x in 9:
+						_check(absi(heights[x] - heights[x + 1]) <= 3, "相邻平台不能超过蓝心可跳跃高度")
+			var cleared_rows := 0
+			for event in a._clear_events:
+				cleared_rows += event["rows"].size()
+			total_cleared += cleared_rows
+			_check(a._generation_attempts <= a.MAX_LAYOUT_TRIES, "随机布局生成必须有次数上限")
+			layouts[str(a._pieces.map(func(p): return [p["kind"], p["col"]]))] = true
+			for p in a._pieces:
+				shapes[p["kind"]] = true
+			var sample := {Vector2i(3, 9): 1}
+			for y in [10, 11]:
 				for x in 10:
-					var top := 12
-					for y in 12:
-						if board.has(Vector2i(x, y)):
-							top = mini(top, y)
-					heights.append(12 - top)
-				for x in 9:
-					_check(absi(heights[x] - heights[x + 1]) <= 3, "相邻平台不能超过蓝心可跳跃高度")
-		var cleared_rows := 0
-		for event in a._clear_events:
-			cleared_rows += event["rows"].size()
-		_check(cleared_rows >= 4, "增加方块后须消除四行，避免越堆越高")
-		var sample := {Vector2i(3, 9): 1}
-		for y in [10, 11]:
-			for x in 10:
-				sample[Vector2i(x, y)] = 0
-		var rows: Array[int] = [10, 11]
-		var cleared: Dictionary = a._clear_board(sample, rows)
-		_check(cleared.size() == 1 and cleared.has(Vector2i(3, 11)), "同时消两行必须正确下移")
-		a.battle = _battle
-		a.t = 0.0
-		a.tick(0.0)
-		_check(a.hazards_r.is_empty(), "未出场方块不能伤人")
-		a.free()
+					sample[Vector2i(x, y)] = 0
+			var rows: Array[int] = [10, 11]
+			var cleared: Dictionary = a._clear_board(sample, rows)
+			_check(cleared.size() == 1 and cleared.has(Vector2i(3, 11)), "同时消两行必须正确下移")
+			a.battle = _battle
+			a.t = 0.0
+			a.tick(0.0)
+			_check(a.hazards_r.is_empty(), "未出场方块不能伤人")
+			# 强制覆盖生成预算耗尽后的安全随机台阶方案。
+			if seed_value < 4:
+				a._safe_layout()
+				_check(a._simulate(), "兜底随机台阶必须完整可跳跃并按时落地")
+			a.free()
+	print("方块随机布局：64组，兜底次数 %d" % fallback_count)
+	_check(total_cleared > 0, "随机布局仍须能够正常消行")
+	_check(layouts.size() >= 32 and shapes.size() == 8, "形状和位置应随种子变化，覆盖所有方块类型")
 
 
 func _flock() -> void:
@@ -260,9 +278,9 @@ func _snow_and_waves() -> void:
 					live += 1
 			_check(live > 0, "雪花应连续落下，中途不能整批消失")
 			live_samples += 1
-	_check(rain._rains.size() == 48 and live_samples > 100, "持续每四分之一拍生成一片雪花")
+	_check(rain._rains.size() == 96 and live_samples > 100, "雪花数量应翻倍至96片，每八分之一拍生成一片")
 	for i in range(1, rain._rains.size()):
-		_check(is_equal_approx(rain._rains[i]["at"] - rain._rains[i - 1]["at"], 0.25), "雪花应错时连续生成")
+		_check(is_equal_approx(rain._rains[i]["at"] - rain._rains[i - 1]["at"], 0.125), "雪花应错时连续生成")
 	rain.free()
 	var a = _attack("p2_distill", 19)
 	a.begin()
