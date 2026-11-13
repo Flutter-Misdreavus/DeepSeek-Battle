@@ -2,6 +2,8 @@ extends Attack
 ## 知识蒸馏：三波、最后一波双教师，逐代分裂出有限转向的追踪鱼群。
 ## 所有个体读取同一份快照；固定 1/120 拍子步保证帧率与暂停不改变分裂时序。
 
+const ENTRY_WARN := 0.5
+const ENTRY_INSET := 32.0
 const WAVE_START := [0.0, 8.0, 16.0]
 const FIRST_SPLIT := [2.5, 10.5, 18.5]
 const WIDTHS := [48, 32, 24, 16]
@@ -41,24 +43,41 @@ func _build() -> void:
 	if _built:
 		return
 	_built = true
-	var c := box.get_center()
+	var previous_side := -1
 	for wave in WAVE_START.size():
+		var sides: Array[int] = [0, 1, 2, 3] # 上、右、下、左
+		if previous_side >= 0:
+			sides.erase(previous_side)
+		var side := sides[rng.randi_range(0, sides.size() - 1)]
+		previous_side = side
 		for teacher in (2 if wave == 2 else 1):
-			var p0 := Vector2(c.x, box.position.y - 30.0)
-			var p1 := Vector2(c.x, box.position.y + 30.0)
-			var heading := PI / 2.0
-			if wave == 1:
-				p0 = Vector2(box.end.x + 30.0, c.y - 10.0) if mirror else Vector2(box.position.x - 30.0, c.y - 10.0)
-				p1 = Vector2(box.end.x - 34.0, c.y - 10.0) if mirror else Vector2(box.position.x + 34.0, c.y - 10.0)
-				heading = PI if mirror else 0.0
-			elif wave == 2:
-				# 第三波两位教师同时入场，各自独立完成三级分裂。
-				var x := box.position.x + box.size.x * (0.25 if teacher == 0 else 0.75)
-				p0 = Vector2(x, box.position.y - 30.0)
-				p1 = Vector2(x, box.position.y + 30.0)
+			# 第三波随机选上下或左右相向入场，保证两位教师绝不来自同侧。
+			var entry_side := side if teacher == 0 else (side + 2) % 4
+			if mirror and entry_side in [1, 3]:
+				entry_side = 4 - entry_side
+			var u := rng.randf_range(0.25, 0.75)
+			var start_u := clampf(u + rng.randf_range(-0.08, 0.08), 0.2, 0.8)
+			if mirror and entry_side in [0, 2]:
+				u = 1.0 - u
+				start_u = 1.0 - start_u
+			var p0 := Vector2.ZERO
+			var p1 := Vector2.ZERO
+			match entry_side:
+				0:
+					p0 = Vector2(box.position.x + box.size.x * start_u, box.position.y - 30.0)
+					p1 = Vector2(box.position.x + box.size.x * u, box.position.y + ENTRY_INSET)
+				1:
+					p0 = Vector2(box.end.x + 30.0, box.position.y + box.size.y * start_u)
+					p1 = Vector2(box.end.x - ENTRY_INSET, box.position.y + box.size.y * u)
+				2:
+					p0 = Vector2(box.position.x + box.size.x * start_u, box.end.y + 30.0)
+					p1 = Vector2(box.position.x + box.size.x * u, box.end.y - ENTRY_INSET)
+				3:
+					p0 = Vector2(box.position.x - 30.0, box.position.y + box.size.y * start_u)
+					p1 = Vector2(box.position.x + ENTRY_INSET, box.position.y + box.size.y * u)
 			_tree.append({"gen": 0, "width": WIDTHS[0], "wave": wave, "p0": p0, "p1": p1,
-				"pos": p0, "heading": heading, "birth": WAVE_START[wave], "split": FIRST_SPLIT[wave],
-				"gone": false, "split_done": false})
+				"pos": p0, "heading": (p1 - p0).angle(), "entry_side": entry_side,
+				"birth": WAVE_START[wave], "split": FIRST_SPLIT[wave], "gone": false, "split_done": false})
 
 
 func _alive(n: Dictionary, now: float) -> bool:
@@ -69,10 +88,13 @@ func _children(parent: Dictionary, now: float) -> void:
 	var gen: int = parent["gen"] + 1
 	var radius := Whale.radius(WIDTHS[gen]) * 0.6 + 3.0
 	var side_dir := Vector2.from_angle(parent["heading"] + PI / 2.0)
+	var fan: float = DELTAS[gen] * rng.randf_range(0.85, 1.15)
+	var jitter := deg_to_rad(rng.randf_range(-8.0, 8.0))
 	for side in [-1, 1]:
 		var pos: Vector2 = parent["pos"] + side_dir * radius * side
 		_tree.append({"gen": gen, "width": WIDTHS[gen], "wave": parent["wave"], "pos": pos,
-			"heading": parent["heading"] + side * DELTAS[gen], "birth": now,
+			"heading": parent["heading"] + jitter + side * fan, "birth": now,
+			"cruise": SPEEDS[gen] * rng.randf_range(0.9, 1.1),
 			"split": now + SPLIT_GAP if gen < 3 else NO_SPLIT, "gone": false, "split_done": false})
 
 
@@ -81,7 +103,7 @@ func _step(now: float, dt: float) -> void:
 	for i in _tree.size():
 		var n: Dictionary = _tree[i]
 		if n["gen"] == 0:
-			n["pos"] = (n["p0"] as Vector2).lerp(n["p1"], clampf(now - n["birth"], 0.0, 1.0))
+			n["pos"] = (n["p0"] as Vector2).lerp(n["p1"], clampf(now - n["birth"] - ENTRY_WARN, 0.0, 1.0))
 		elif _alive(n, now - dt):
 			snapshot.append({"i": i, "pos": n["pos"], "heading": n["heading"], "width": n["width"], "wave": n["wave"]})
 	var updates: Array = []
@@ -113,7 +135,7 @@ func _step(now: float, dt: float) -> void:
 		if desired.length_squared() > 0.0001:
 			heading += clampf(angle_difference(heading, desired.angle()), -TURN * dt, TURN * dt)
 		var move_dt := minf(dt, maxf(0.0, float(n["split"]) - (now - dt)))
-		updates.append({"i": item["i"], "heading": heading, "pos": pos + Vector2.from_angle(heading) * SPEEDS[n["gen"]] * move_dt})
+		updates.append({"i": item["i"], "heading": heading, "pos": pos + Vector2.from_angle(heading) * n["cruise"] * move_dt})
 	for update in updates:
 		var n: Dictionary = _tree[update["i"]]
 		n["heading"] = update["heading"]
@@ -230,6 +252,14 @@ func _caption() -> String:
 func _draw() -> void:
 	if not _built:
 		_build()
+	# 入场侧先闪出气泡；位置提前锁定，教师不会突然从玩家身边生成。
+	for n in _tree:
+		if n["gen"] == 0 and t >= n["birth"] - ENTRY_WARN and t < n["birth"] + ENTRY_WARN:
+			var edge: Vector2 = (n["p0"] as Vector2).clamp(box.position + Vector2.ONE * 2.0, box.end - Vector2.ONE * 2.0)
+			var along := Vector2.RIGHT if n["entry_side"] in [0, 2] else Vector2.DOWN
+			for i in 5:
+				var p: Vector2 = edge + along * (i - 2) * 5.0
+				draw_circle(p.round(), 1.0 + (i % 2), C.COLD if int(t * 8.0) % 2 == 0 else C.SYS)
 	for n in _tree:
 		if not _alive(n, t):
 			continue

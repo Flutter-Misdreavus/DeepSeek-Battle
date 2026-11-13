@@ -30,7 +30,6 @@ var version := 4096
 var spare := 0                         # 0 = 没进展；1 = 本阶段做了关键行动；2 = 又躲过一次攻击且没碰停止 → 进下一阶段
 var spare_ready := false               # 终局后她跪下，可以饶恕
 var finale_done := false
-var spare_touched := false            # 饶恕路线终局 Ctrl+A 时，你伸手碰了她的光标（结局多一句话）
 var event_line := ""                   # 她下回合先说的话（打中她、按了停止之后）
 var next_speed := 1.0
 var _run_seed := 0

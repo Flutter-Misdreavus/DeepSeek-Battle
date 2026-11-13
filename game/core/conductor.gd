@@ -48,6 +48,12 @@ func _ready() -> void:
 		AudioServer.set_bus_volume_db(_bus, -80.0)
 
 
+## 获取某段原始配乐的一拍秒数，供跨阶段复用攻击时保持相同的实际速度。
+func section_spb(name: String) -> float:
+	var s: Dictionary = _sections.get(name, {})
+	return 60.0 / float(s["bpm"]) if s.has("bpm") else _spb_default
+
+
 ## 播放一段配乐，从第 from_beat 拍开始
 func play(name: String, from_beat := 0.0) -> void:
 	section = name
@@ -55,7 +61,7 @@ func play(name: String, from_beat := 0.0) -> void:
 	looped = s.get("loop", true)
 	_first = s.get("first_beat_in_clip", 0.0)
 	_len = s.get("length_sec", 0.0)
-	spb = 60.0 / float(s["bpm"]) if s.has("bpm") else _spb_default
+	spb = section_spb(name)
 	_t = _first + from_beat * spb
 	_playing = true
 	var path := "res://audio/music/%s.wav" % name

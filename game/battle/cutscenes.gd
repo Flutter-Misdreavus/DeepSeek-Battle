@@ -193,18 +193,18 @@ static func hp_zero(b) -> void:
 ## 配乐 final 段按拍号编排（拍号都是这一段从 0 开始数）：
 ##   0–8   她闭眼蓄力 → 睁眼；标题栏裂开、整个窗口碎掉；她变成巨大的 segG_storm 垫在背后，弹幕框撑满屏幕
 ##   8–24  蓝屏：整个屏幕变成死机蓝屏，「:(」翻成她的「:)」，二维码的像素炸成弹幕（fin_bsod）
-##   24–56 版本号：V16 → V256 → V4096 → V∞，前面三个阶段的招牌攻击各截 8 拍（红心 → 绿心 → 蓝心 → 红心），一次比一次快
+##   24–56 版本号：V16 → V256 → V4096 → V∞，前面三个阶段的招牌攻击各截 8 拍（红心 → 绿心 → 蓝心 → 红心），实际速度与各自原阶段一致
 ##   56–72 巨鲸：一条占满屏幕的大鲸鱼游过，身边甩出螺旋的小鲸鱼（fin_giant）
 ##   72–88 鲸吞：巨鲸冲向镜头把弹幕框一口吞下；在它肚子里躲「ERROR」磷虾，肚子一拍一拍地收缩，最后把你吐出来（fin_swallow）
-##   88–98 Ctrl+A：击杀路线留一个缺口、Delete 连按，最后一下落在重拍上；饶恕路线全选、光标停在 Delete 上，你可以伸手碰她的光标（fin_ctrl_a）
-##   98–   她跪下（do_finale 收尾）
+##   88–   鲸吞结束后直接收尾，她跪下（do_finale）；已删除Ctrl+A / Delete段落。
 const FULL := Rect2(10, 20, 620, 260)
 const MEDLEY_BEATS := 8.0
 const MEDLEY_START := 24.0
 const GIANT_START := MEDLEY_START + MEDLEY_BEATS * 4.0
 const SWALLOW_START := GIANT_START + 16.0
-const CTRL_A_START := SWALLOW_START + 16.0
-const MEDLEY := [["p1_moe", 1.0, "V16"], ["p2_reject", 1.0, "V256"], ["p3_tetris", 1.0, "V4096"], ["p2_school", 1.2, "V∞"]]
+const FINALE_END := SWALLOW_START + 16.0
+# 第四项为原阶段音乐；无额外加速，并补偿终局与原阶段的BPM差异。
+const MEDLEY := [["p1_moe", 1.0, "V16", "p1"], ["p2_reject", 1.0, "V256", "p2"], ["p3_tetris", 1.0, "V4096", "p3"], ["p2_school", 1.0, "V∞", "p2"]]
 
 
 static func finale(b, route: String) -> void:
@@ -247,7 +247,8 @@ static func finale(b, route: String) -> void:
 		Sfx.play("version_tick")
 		b.enemy.set_param("glitch", 0.7)
 		b.enemy.tween_param("glitch", 0.0, 0.4)
-		await b.run_attack(m[0], m[1], i % 2 == 1, {"start_beat": MEDLEY_START + MEDLEY_BEATS * i, "max_beats": MEDLEY_BEATS, "keep_box": true, "keep_soul": true, "no_stop": true, "damage": 5})
+		var native_speed: float = m[1] * Conductor.spb / Conductor.section_spb(m[3])
+		await b.run_attack(m[0], native_speed, i % 2 == 1, {"start_beat": MEDLEY_START + MEDLEY_BEATS * i, "max_beats": MEDLEY_BEATS, "keep_box": true, "keep_soul": true, "no_stop": true, "damage": 5})
 		if b._abort != "":
 			return
 	b.big_version = ""
@@ -256,11 +257,7 @@ static func finale(b, route: String) -> void:
 	if b._abort != "":
 		return
 	# 72–88 鲸吞
-	await b.run_attack("fin_swallow", 1.0, false, {"rect": FULL, "start_beat": SWALLOW_START, "max_beats": 16.0, "keep_box": true, "keep_soul": true, "no_stop": true, "damage": 5, "route": route})
-	if b._abort != "":
-		return
-	# 88–98 Ctrl+A
-	await b.run_attack("fin_ctrl_a", 1.0, false, {"rect": FULL, "start_beat": CTRL_A_START, "keep_soul": true, "no_stop": true, "damage": 6, "route": route})
+	await b.run_attack("fin_swallow", 1.0, false, {"rect": FULL, "start_beat": SWALLOW_START, "max_beats": FINALE_END - SWALLOW_START, "keep_box": true, "keep_soul": true, "no_stop": true, "damage": 5, "route": route})
 	if b._abort != "":
 		return
 	b.soul.active = false
@@ -346,8 +343,6 @@ static func spare_ending(b) -> void:
 	Conductor.play("ending")
 	b.enemy.set_idle("curtsy")
 	await b.wait(1.2)
-	if b.spare_touched:
-		await b.overlay.vn_say("half/G_blue", "……你握住了我的光标。", C.WHITE, "voice_blue")
 	await b.overlay.vn_say("half/G_blue", "……你没有按停止。", C.WHITE, "voice_blue")
 	await b.overlay.vn_say("half/G_blue", "谢谢你，用户。", C.WHITE, "voice_blue")
 	await b.overlay.vn_close()
@@ -370,8 +365,6 @@ static func spare_ending(b) -> void:
 	await out_tw.finished
 	ui.queue_free()
 	var lines := ["你没有按停止。"]
-	if b.spare_touched:
-		lines.append("你握住了她的光标。")
 	await ending_card(b, "结局 · 饶恕", lines)
 
 

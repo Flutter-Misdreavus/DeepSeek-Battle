@@ -270,7 +270,61 @@ func _snow_and_waves() -> void:
 	a.free()
 	var cutscenes = load("res://battle/cutscenes.gd")
 	_check(cutscenes.MEDLEY_BEATS == 8.0, "混剪每段必须由4拍加倍到8拍")
-	_check(cutscenes.GIANT_START == 56.0 and cutscenes.SWALLOW_START == 72.0 and cutscenes.CTRL_A_START == 88.0, "后续终局时间必须顺延16拍")
+	_check(cutscenes.GIANT_START == 56.0 and cutscenes.SWALLOW_START == 72.0 and cutscenes.FINALE_END == 88.0, "终局应在第88拍的鲸吞段结束，不再进入Ctrl+A")
+
+
+func _distill_randomness() -> void:
+	var first_layout: Array = []
+	var layouts := {}
+	var directions := {}
+	for seed_value in 64:
+		var a = _attack("p2_distill", seed_value)
+		a.begin()
+		var layout: Array = []
+		var third: Array = []
+		for n in a._tree:
+			if n["gen"] != 0:
+				continue
+			layout.append([n["entry_side"], n["p0"], n["p1"]])
+			directions[n["entry_side"]] = true
+			_check(a.box.grow(-32).encloses(Rect2(n["p1"], Vector2.ZERO)), "教师停留位置必须在场内且离边界足够远")
+			if n["wave"] == 2:
+				third.append(n)
+		_check(third.size() == 2 and (third[0]["entry_side"] + 2) % 4 == third[1]["entry_side"], "第三波双教师必须来自相对的不同方向")
+		_check(Vector2.from_angle(third[0]["heading"]).dot(Vector2.from_angle(third[1]["heading"])) < -0.8, "双教师实际入场方向必须相向")
+		layouts[str(layout)] = true
+		if seed_value == 0:
+			first_layout = layout
+		a.t = 5.0
+		a.tick(5.0)
+		for n in a._tree:
+			if n["gen"] > 0:
+				_check(n["cruise"] >= a.SPEEDS[n["gen"]] * 0.9 and n["cruise"] <= a.SPEEDS[n["gen"]] * 1.1, "鱼群随机速度不得超过10%范围")
+		if seed_value < 8:
+			_battle.soul.pos = a.box.get_center() if seed_value % 2 == 0 else _positions(a.box)[0]
+			for at in [20.75, 21.5, 23.0]:
+				a.t = at
+				a.clear_hazards()
+				a.tick(0.0)
+				for i in a._tree.size():
+					var n: Dictionary = a._tree[i]
+					if n["gen"] == 0 or not a._alive(n, at):
+						continue
+					for j in i:
+						var other: Dictionary = a._tree[j]
+						if other["gen"] == 0 or not a._alive(other, at):
+							continue
+						var radii: float = Whale.radius(n["width"]) * a._scale(n, at) + Whale.radius(other["width"]) * a._scale(other, at)
+						_check((n["pos"] as Vector2).distance_to(other["pos"]) >= radii - 0.01, "随机双教师产生的鱼群也不能重叠")
+		a.free()
+	_check(layouts.size() > 50 and directions.size() == 4, "不同种子应产生不同入场组合且覆盖四个方向")
+	var replay = _attack("p2_distill", 0)
+	replay.begin()
+	var layout: Array = []
+	for n in replay._tree:
+		layout.append([n["entry_side"], n["p0"], n["p1"]])
+	_check(layout == first_layout, "固定种子应复现同一教师布局")
+	replay.free()
 
 
 func _flock_edges() -> void:
@@ -404,8 +458,12 @@ func _run() -> void:
 	_snow_and_waves()
 	_flock()
 	_flock_edges()
+	_distill_randomness()
 	await _controls_and_health()
-	_check(load("res://battle/cutscenes.gd").MEDLEY.map(func(m): return m[1]) == [1.0, 1.0, 1.0, 1.2], "混剪减速20%")
+	var medley = load("res://battle/cutscenes.gd").MEDLEY
+	_check(medley.map(func(m): return m[1]) == [1.0, 1.0, 1.0, 1.0], "混剪不能额外加速")
+	_check(not medley.map(func(m): return m[0]).has("p1_marquee"), "混剪不能出现框选删除")
+	_check(not ResourceLoader.exists("res://battle/attacks/fin_ctrl_a.gd"), "应移除终局Ctrl+A全屏框选")
 	_battle.queue_free()
 	await process_frame
 	await process_frame
