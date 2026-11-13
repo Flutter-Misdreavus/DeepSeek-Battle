@@ -6,7 +6,8 @@ extends Node2D
 ##           挡没挡住由攻击自己判断（读 shield_dir），挡住时调用 block() 出火花和音效。
 ##   "blue"  蓝心：往 gravity 方向掉。只能沿地面方向移动；落地后按「和重力相反的方向键」起跳，按得越久跳得越高。
 ##           触屏：沿地面方向拖动移动；手指按下起跳，按住跳得更高。
-##           slam(方向)：把重力改到那个方向并猛地摔过去（她拖窗口、转窗口时用），撞墙时发 slammed 信号。
+##           slam(方向)：把重力改到那个方向并猛地摔过去，撞墙时发 slammed 信号。
+##           solids：攻击可以放进一些矩形（比如落地的俄罗斯方块），蓝心会站在上面、被它们挡住；被压在里面时自动往上挤出来。
 ## pull：外力（逻辑像素/秒），拖拽攻击用；tether：非 null 时从这点到心画一根红线。
 
 signal slammed
@@ -25,6 +26,7 @@ var pos := Vector2(320, 238)
 var active := false
 var area := Rect2()
 var pull := Vector2.ZERO
+var solids: Array = []          # 元素是 Rect2；蓝心能站上去、会挡路的方块（battle 坐标；攻击每帧更新，结束时 battle 清空）
 var tether = null
 var iframe := 0.0
 var shown := true
@@ -123,11 +125,11 @@ static func _axis(v: Vector2) -> Vector2i:
 func _blue_step(dt: float) -> void:
 	var g := Vector2(gravity)
 	var side := Vector2(absf(g.y), absf(g.x))           # 沿地面的轴
-	# 沿地面移动
+	# 沿地面移动（先走横向、被方块挡住就停在边上，再走重力方向）
 	var m := Inp.move_vec().dot(side) * C.SOUL_SPEED * dt
 	m += Inp.drag.dot(side)
 	m = clampf(m, -C.SOUL_SPEED * C.TOUCH_CAP * dt, C.SOUL_SPEED * C.TOUCH_CAP * dt)
-	pos += side * m
+	_move(side * (m + pull.dot(side) * dt))
 	# 起跳：键盘按住「反重力方向键」；触屏往反重力方向滑超过 8px（一次滑动只跳一次，按住手指跳得更高）
 	var key_up := Inp.move_vec().dot(-g) > 0.0
 	if not Inp.touching or Inp.tap != null:
@@ -147,23 +149,69 @@ func _blue_step(dt: float) -> void:
 		if not held and vel < -CUT_V and not _slamming:
 			vel = -CUT_V
 		vel += (GRAV_HOLD if held and vel < 0.0 else GRAV) * dt
-		pos += g * vel * dt
-	pos += pull * dt
-	# 落地 / 顶头
-	var c := clamp_in(pos)
-	var hit_floor := (c - pos).dot(g) < 0.0 or _at_wall(c, g)
-	var hit_ceil := (c - pos).dot(g) > 0.0
-	pos = c
-	if hit_floor and vel >= 0.0:
-		if _slamming:
-			_slamming = false
-			slammed.emit()
+		var blocked := _move(g * (vel * dt + pull.dot(g) * dt))
+		if blocked and vel >= 0.0:
+			if _slamming:
+				_slamming = false
+				slammed.emit()
+			on_floor = true
+			vel = 0.0
+		elif blocked and vel < 0.0:
+			vel = 0.0                                     # 顶头
+	_unstick(g)
+	if on_floor and not _supported(g):
+		on_floor = false                                  # 脚下没东西了（方块被消掉、框变大、换了重力）
+	elif not on_floor and vel >= 0.0 and _supported(g):
 		on_floor = true
 		vel = 0.0
-	elif hit_ceil and vel < 0.0:
+
+
+## 沿一个轴移动；被框边或 solids 里的方块挡住就停在边上。返回是否被挡住。
+func _move(motion: Vector2) -> bool:
+	if motion == Vector2.ZERO:
+		return false
+	var want := pos + motion
+	pos = clamp_in(want)
+	var blocked := not pos.is_equal_approx(want)
+	for r in solids:
+		if not Rect2(pos - C.SOUL_HALF, C.SOUL_HALF * 2.0).intersects(r):
+			continue
+		blocked = true
+		if motion.x > 0.0:
+			pos.x = r.position.x - C.SOUL_HALF.x
+		elif motion.x < 0.0:
+			pos.x = r.end.x + C.SOUL_HALF.x
+		elif motion.y > 0.0:
+			pos.y = r.position.y - C.SOUL_HALF.y
+		else:
+			pos.y = r.end.y + C.SOUL_HALF.y
+	return blocked
+
+
+## 脚下（重力方向 1px）有没有东西托着
+func _supported(g: Vector2) -> bool:
+	if _at_wall(pos, g):
+		return true
+	var probe := Rect2(pos - C.SOUL_HALF + g, C.SOUL_HALF * 2.0)
+	for r in solids:
+		if probe.intersects(r):
+			return true
+	return false
+
+
+## 被方块压在里面了（方块落在心上）：逆着重力一格一格往外挪，直到不重叠
+func _unstick(g: Vector2) -> void:
+	for i in 300:
+		var me := Rect2(pos - C.SOUL_HALF, C.SOUL_HALF * 2.0)
+		var hit := false
+		for r in solids:
+			if me.intersects(r):
+				hit = true
+				break
+		if not hit:
+			return
+		pos -= g
 		vel = 0.0
-	if on_floor and not _at_wall(pos, g):
-		on_floor = false                                  # 地面被拿走了（窗口变大、换了重力）
 
 
 ## p 是否贴着重力方向那面墙

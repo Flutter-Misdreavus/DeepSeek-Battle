@@ -476,6 +476,7 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 	soul.iframe = 0.0
 	soul.pull = Vector2.ZERO
 	soul.tether = null
+	soul.solids.clear()
 	box.mask.add_child(atk)
 	cur_attack = atk
 	turn_damage = 0
@@ -521,6 +522,7 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 		soul.set_mode("red", true)
 	soul.pull = Vector2.ZERO
 	soul.tether = null
+	soul.solids.clear()
 	cur_attack = null
 	atk.queue_free()
 	enemy.set_pose(enemy.idle)
