@@ -42,6 +42,18 @@ LOOPING = {"title", "p1", "p2", "p3", "ending"}
 ORDER = ["title", "p1", "p2", "p3", "final", "gameover", "ending"]
 HINT_BPM = {"title": 84, "p1": 110, "p2": 124, "p3": 140, "final": 150, "gameover": 72, "ending": 80}   # 提示词里写的速度
 INTRO_BEATS = 32
+# 每首可循环曲子的循环点搜索范围（拍）：(起点最小, 起点最大, 终点最大, 可选长度)。
+# 按 2026-11-13 这批生成曲的响度曲线定的：避开中间的安静段（p1 第 16–22、39–46 小节，p3 第 16–23 小节），
+# 换了曲子要重新看 `--bars` 打出的响度再改。
+LOOP_RANGE = {
+    "title": (0, 8, 112, (64, 80, 96, 104)),
+    "p1": (92, 100, 156, (56, 64)),
+    "p2": (32, 64, 224, (96, 128, 160)),
+    "p3": (96, 128, 248, (96, 112, 128, 144)),
+    "ending": (0, 8, 76, (64, 72)),
+}
+LONG_XFADE = {"title": 0.5, "ending": 0.5}   # 接缝分数低的安静曲子用长一点的交叉淡化（秒）
+AUDIO_EXT = {".mp3", ".wav", ".flac", ".ogg", ".m4a"}
 
 
 def decode(path: Path) -> np.ndarray:
@@ -94,19 +106,32 @@ def seam(mono: np.ndarray, t0: float, spb: float, s: int, e: int) -> float:
     return cos - 2.0 * abs(ra - rb) / max(ra, rb)
 
 
-def choose_loop(mono: np.ndarray, t0: float, spb: float, total_beats: int, min_start: int) -> tuple[int, int, float]:
+def choose_loop(mono: np.ndarray, t0: float, spb: float, total_beats: int, rng: tuple) -> tuple[int, int, float]:
+    lo, hi, end_max, lengths = rng
     best = None
-    for s in range(min_start, min_start + 33, 4):
-        for length in (32, 48, 64, 96, 128):
+    for s in range(lo, hi + 1, 4):
+        for length in lengths:
             e = s + length
-            if e + 1 > total_beats:
+            if e > end_max or e + 1 > total_beats:
                 continue
             sc = seam(mono, t0, spb, s, e)
             if best is None or sc > best[2]:
                 best = (s, e, sc)
     if best is None:
-        raise RuntimeError("track too short for a loop")
+        raise RuntimeError("no loop candidate fits")
     return best
+
+
+def bar_levels(mono: np.ndarray, t0: float, spb: float) -> str:
+    out = []
+    b = 0
+    while int((t0 + (b + 4) * spb) * SR) <= len(mono):
+        a = int((t0 + b * spb) * SR)
+        z = int((t0 + (b + 4) * spb) * SR)
+        out.append(float(np.sqrt(np.mean(mono[a:z] ** 2))))
+        b += 4
+    m = max(out) or 1.0
+    return " ".join(str(int(9 * x / m)) for x in out)
 
 
 def write(name: str, audio: np.ndarray) -> None:
@@ -115,11 +140,13 @@ def write(name: str, audio: np.ndarray) -> None:
     sf.write(OUT / f"{name}.wav", audio.astype(np.float32), SR, subtype="PCM_16")
 
 
-def loop_clip(audio: np.ndarray, a: int, b: int) -> np.ndarray:
+def loop_clip(audio: np.ndarray, a: int, b: int, xfade: int = XFADE) -> np.ndarray:
+    """Loop [a, b): the tail fades into the audio just before a, so b flows into a."""
     seg = audio[a:b].copy()
-    if a >= XFADE:
-        ramp = np.linspace(0.0, 1.0, XFADE)[:, None]
-        seg[-XFADE:] = seg[-XFADE:] * (1 - ramp) + audio[a - XFADE : a] * ramp
+    n = min(xfade, a)
+    if n > 0:
+        ramp = np.linspace(0.0, 1.0, n)[:, None]
+        seg[-n:] = seg[-n:] * np.sqrt(1 - ramp) + audio[a - n : a] * np.sqrt(ramp)
     return seg
 
 
@@ -137,7 +164,7 @@ def main() -> None:
     meta = json.loads(meta_path.read_text()) if meta_path.exists() else {"sections": {}}
     meta.pop("placeholder", None)
     for name in want:
-        files = sorted(SRC.glob(f"{name}.*"))
+        files = sorted(f for f in SRC.glob(f"{name}.*") if f.suffix.lower() in AUDIO_EXT)
         if not files:
             print(f"{name:9s} (没有文件，跳过)")
             continue
@@ -147,11 +174,10 @@ def main() -> None:
         spb = 60.0 / bpm
         total = int((len(audio) / SR - t0) / spb)
         if name in LOOPING:
-            start_min = INTRO_BEATS if name == "p1" else 0
-            s, e, sc = choose_loop(mono, t0, spb, total, start_min)
+            s, e, sc = choose_loop(mono, t0, spb, total, LOOP_RANGE[name])
             a = int((t0 + s * spb) * SR)
             b = int((t0 + e * spb) * SR)
-            write(name, loop_clip(audio, a, b))
+            write(name, loop_clip(audio, a, b, int(LONG_XFADE.get(name, 0.0) * SR) or XFADE))
             meta["sections"][name] = {"bpm": round(bpm, 3), "beats": e - s, "length_sec": (b - a) / SR,
                                       "loop": True, "first_beat_in_clip": 0.0, "seam_score": round(sc, 4),
                                       "source": files[0].name, "source_beats": [s, e]}
@@ -171,6 +197,7 @@ def main() -> None:
                                       "loop": False, "first_beat_in_clip": 0.0, "source": files[0].name}
             info = f"one-shot {len(clip) / SR:.1f}s"
         print(f"{name:9s} {bpm:7.2f} BPM  beat0 {t0:6.3f}s  grid {gscore:.3f}  {info}")
+        print(f"          每小节响度 {bar_levels(mono, t0, spb)}")
     meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
 
 
