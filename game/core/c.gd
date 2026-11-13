@@ -36,7 +36,7 @@ const PANEL_R := Rect2(480, 22, 150, 128)
 const LINE_H := 16                     # 文字框行距
 
 # ── 红心 ──────────────────────────────────────────────────────
-const SOUL_SPEED := 120.0              # 逻辑像素 / 秒
+const SOUL_SPEED := 156.0              # 逻辑像素 / 秒
 const TOUCH_CAP := 1.5                 # 触屏每帧位移上限 = 键盘速度 × 1.5
 const IFRAMES := 1.0                   # 受击后无敌秒数
 const HITBOX := Vector2(7, 6)          # 判定框（比 13×12 的心小）

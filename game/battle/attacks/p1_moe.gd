@@ -2,7 +2,7 @@ extends Attack
 ## P1-2「MoE 路由」
 ##
 ## DeepSeek 是混合专家模型：框上方 8 个专家格子，每一拍只激活其中几列，被选中的列向下射光束。
-## - 每次预警锁定玩家当时所在列，之后不追踪换列；宽框会延长预警。
+## - 每次预警有50%概率激活玩家当时所在列，否则不选该列；之后不追踪换列。
 ## - 选列时保证至少有两列相邻的列没被选中，所以框里始终有一条 48px 宽的安全区。
 ## - b ≤ 6 激活 2 列；7–9 激活 3 列；10–12 激活 4 列。每次预警时按玩家位置随机选择并缓存。
 ## - 光束覆盖整列，消除列边缘可站桩的判定缝；持续0.6拍，伤害0.5拍后才收窄。
@@ -33,13 +33,15 @@ func setup() -> void:
 func _choose_columns() -> Array:
 	var b := _picks.size() + 1
 	var count := 2 if b <= 6 else (3 if b <= 9 else 4)
+	var target_player := rng.randf() < 0.5
+	var player_col := _player_column()
 	var candidates: Array = []
 	for mask in 256:
 		var pick: Array = []
 		for col in COLS:
 			if mask & (1 << col):
 				pick.append(col)
-		if pick.size() == count and _pick_ok(pick):
+		if pick.size() == count and pick.has(player_col) == target_player and _pick_ok(pick):
 			candidates.append(pick)
 	assert(not candidates.is_empty(), "MoE 必须存在可达的安全列")
 	return candidates[rng.randi_range(0, candidates.size() - 1)]
@@ -66,8 +68,6 @@ func _column_width() -> float:
 
 
 func _pick_ok(pick: Array) -> bool:
-	if not pick.has(_player_column()):
-		return false
 	if not _picks.is_empty() and pick == _picks[-1]:
 		return false
 	# 上一束光持续半拍，另留 0.05 拍余量；按较慢的键盘横向速度估计。

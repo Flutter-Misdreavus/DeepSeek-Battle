@@ -36,6 +36,8 @@ func _positions(r: Rect2) -> Array[Vector2]:
 
 
 func _random_safety() -> void:
+	var targeted := 0
+	var selections := 0
 	for seed_value in 64:
 		var busy = _attack("p1_busy", seed_value)
 		var marquee = _attack("p1_marquee", seed_value)
@@ -70,8 +72,13 @@ func _random_safety() -> void:
 			moe.speed = 1.25
 			moe.begin()
 			for i in 12:
+				var probe := RandomNumberGenerator.new()
+				probe.state = moe.rng.state
+				var expected := probe.randf() < 0.5
 				var pick: Array = moe._choose_columns()
-				_check(pick.has(moe._player_column()), "玩家所在列必须激活")
+				_check(pick.has(moe._player_column()) == expected, "玩家列必须由独立50%抽签决定，未命中时不能被额外选入")
+				targeted += int(pick.has(moe._player_column()))
+				selections += 1
 				_check(moe._pick_ok(pick), "MoE 必须保留可达的相邻安全列且不连续重复")
 				_check(pick.size() == (2 if i < 6 else (3 if i < 9 else 4)), "MoE 难度应逐步增加")
 				moe._picks.append(pick)
@@ -84,20 +91,21 @@ func _random_safety() -> void:
 				_check(pos.x + flake["size"] * 0.5 <= gap.x or pos.x - flake["size"] * 0.5 >= gap.y, "雪花摆动不能侵占安全通道")
 		for a in [busy, marquee, moe, rain]:
 			a.free()
+	_check(absf(float(targeted) / selections - 0.5) < 0.05, "跨种子玩家列激活比例应接近50%")
 
 
 func _cache_and_seed() -> void:
-	for id in ["p1_busy", "p1_marquee", "fin_bsod"]:
+	for id in ["p1_busy", "p1_marquee", "fin_bsod", "p1_moe"]:
 		var a = _attack(id, 123)
 		var b = _attack(id, 123)
 		if a == null or b == null:
 			return
 		_battle.soul.pos = a.box.get_center()
-		a.t = 11.5 if id == "p1_busy" else (0.0 if id == "p1_marquee" else 7.5)
+		a.t = {"p1_busy": 11.5, "p1_marquee": 0.0, "fin_bsod": 7.5, "p1_moe": 1.0}[id]
 		b.t = a.t
 		a.tick(0.0)
 		b.tick(0.0)
-		var field := "_centers" if id == "p1_busy" else ("_rects" if id == "p1_marquee" else "_rains")
+		var field: String = {"p1_busy": "_centers", "p1_marquee": "_rects", "fin_bsod": "_rains", "p1_moe": "_picks"}[id]
 		var cached = a.get(field).duplicate(true)
 		_check(cached == b.get(field), id + "：同种子同输入应复现")
 		_battle.soul.pos = a.box.position + C.SOUL_HALF
@@ -213,22 +221,25 @@ func _targeted_moe() -> void:
 				_battle.soul.pos = Vector2(lerpf(a.box.position.x + C.SOUL_HALF.x, a.box.end.x - C.SOUL_HALF.x, i / 32.0), a.box.get_center().y)
 				a._picks.clear()
 				var pick: Array = a._choose_columns()
-				_check(pick.has(a._player_column()) and a._pick_ok(pick), "普通与宽屏MoE都必须锁定玩家列且保留可达安全列")
+				_check(a._pick_ok(pick), "普通与宽屏MoE均须保留可达安全列")
 				a._picks.append(pick)
 				a.prev_t = a.t
 				a.t = 1.0 + a._warning_beats + 0.1
 				a.clear_hazards()
 				a.tick(0.0)
-				_check(a.hits(_battle.soul.hitbox()), "MoE站桩必须命中，含列边界")
+				if pick.has(a._player_column()):
+					_check(a.hits(_battle.soul.hitbox()), "抽中玩家列时必须命中，含列边界")
 			# 精确列边界也不能躲进判定缝。
 			for i in range(1, 8):
 				_battle.soul.pos.x = a.box.position.x + width * i / 8.0
 				a._picks.clear()
-				a._picks.append(a._choose_columns())
+				var pick: Array = a._choose_columns()
+				a._picks.append(pick)
 				a.t = 1.0 + a._warning_beats + 0.1
 				a.clear_hazards()
 				a.tick(0.0)
-				_check(a.hits(_battle.soul.hitbox()), "精确列边界不能站桩")
+				if pick.has(a._player_column()):
+					_check(a.hits(_battle.soul.hitbox()), "抽中玩家列后精确边界也不能躲过激光")
 			a.free()
 	conductor.spb = spb
 
