@@ -29,6 +29,7 @@ var version := 4096
 var spare := 0                         # 0 = 没进展；1 = 本阶段做了关键行动；2 = 又躲过一次攻击且没碰停止 → 进下一阶段
 var spare_ready := false               # 终局后她跪下，可以饶恕
 var finale_done := false
+var spare_touched := false            # 饶恕路线终局 Ctrl+A 时，你伸手碰了她的光标（结局多一句话）
 var event_line := ""                   # 她下回合先说的话（打中她、按了停止之后）
 var next_speed := 1.0
 var attack_i := 0
@@ -52,7 +53,6 @@ var _stop_msg := ""
 var _shards: Array = []                # 第二阶段停止按钮炸开的碎片 {p, v}
 var kill_dialog := {}                  # 「结束进程」弹窗
 var big_version := ""                  # 终局里框上方的大号版本号（空 = 不画）
-var invert := ColorRect.new()          # 终局「负片」：反色它下面的整个画面；红心由 overlay.heart_pos 在上面重画，保持红色
 
 
 func _ready() -> void:
@@ -64,13 +64,6 @@ func _ready() -> void:
 	soul.slammed.connect(func() -> void:
 		shake(4.0)
 		Sfx.play("slam"))
-	var im := ShaderMaterial.new()
-	im.shader = preload("res://fx/invert.gdshader")
-	invert.material = im
-	invert.visible = false
-	invert.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(invert)
-	move_child(invert, overlay.get_index())   # 反色盖住背景、她、框和界面（界面文字反色后仍然可读）；红心由 overlay 在上面重画
 	bubble.battle = self
 	hud.battle = self
 	overlay.battle = self
@@ -161,7 +154,7 @@ func do_finale(route: String) -> void:
 	enemy.breathing = false
 
 
-## 把终局改过的舞台恢复原样（立绘大小位置、标题栏、负片、面板、大号版本号）
+## 把终局改过的舞台恢复原样（立绘大小位置、标题栏、面板、大号版本号）
 func reset_stage() -> void:
 	enemy.height = C.STAGE_H
 	enemy.foot = C.STAGE_FOOT
@@ -170,20 +163,9 @@ func reset_stage() -> void:
 	enemy.aura = 0.0
 	frame.broken = false
 	frame.cracks = 0
-	set_invert(false)
 	bg.panels = true
 	box.fill = C.BLACK
 	big_version = ""
-
-
-func set_invert(on: bool) -> void:
-	invert.visible = on
-	if not on:
-		overlay.heart_pos = null
-	if on:
-		var vs := get_viewport_rect().size
-		invert.position = -position
-		invert.size = vs
 
 
 func _phase_for_hp() -> int:
@@ -744,8 +726,6 @@ func _process(dt: float) -> void:
 		if _stop_msg_t > 1.0:
 			_stop_msg_t = -1.0
 	over.queue_redraw()
-	if invert.visible:
-		overlay.heart_pos = soul.pos if soul.shown and not (soul.iframe > 0.0 and int(soul.iframe * 12.0) % 2 == 0) else null
 
 
 func _notification(what: int) -> void:

@@ -169,15 +169,15 @@ static func hp_zero(b) -> void:
 
 
 # ── 终局「出屏」（两条路线都会经过）─────────────────────────
-## 配乐 final 段一共 64 拍，按拍号编排（拍号都是这一段从 0 开始数）：
+## 配乐 final 段按拍号编排（拍号都是这一段从 0 开始数）：
 ##   0–8   她闭眼蓄力 → 睁眼；标题栏裂开、整个窗口碎掉；她变成巨大的 segG_storm 垫在背后，弹幕框撑满屏幕
-##   8–24  防火墙：红砖迷宫往左卷（fin_firewall）
-##   24–32 负片：全屏反色，字块流加速（p1_stream ×1.5）
-##   32–48 版本号：V16 → V256 → V4096 → V∞，前面的攻击各截 4 拍、一次比一次快、交替镜像
-##   48–57 Ctrl+A：击杀路线留一个缺口、Delete 四次后最后一下落在重拍上；饶恕路线全选但她没有按（fin_ctrl_a）
-##   57–   她跪下（do_finale 收尾）
+##   8–24  蓝屏：整个屏幕变成死机蓝屏，「:(」翻成她的「:)」，二维码的像素炸成弹幕（fin_bsod）
+##   24–40 版本号：V16 → V256 → V4096 → V∞，前面三个阶段的招牌攻击各截 4 拍（红心 → 绿心 → 蓝心 → 红心），一次比一次快
+##   40–56 巨鲸：一条占满屏幕的大鲸鱼游过，身边甩出螺旋的小鲸鱼（fin_giant）
+##   56–66 Ctrl+A：击杀路线留一个缺口、Delete 连按，最后一下落在重拍上；饶恕路线全选、光标停在 Delete 上，你可以伸手碰她的光标（fin_ctrl_a）
+##   66–   她跪下（do_finale 收尾）
 const FULL := Rect2(10, 20, 620, 260)
-const MEDLEY := [["p1_moe", 1.25, "V16"], ["p2_marquee", 1.5, "V256"], ["p2_spread", 1.75, "V4096"], ["p1_busy", 2.0, "V∞"]]
+const MEDLEY := [["p1_moe", 1.25, "V16"], ["p2_reject", 1.25, "V256"], ["p3_window", 1.25, "V4096"], ["p2_school", 1.5, "V∞"]]
 
 
 static func finale(b, route: String) -> void:
@@ -209,32 +209,27 @@ static func finale(b, route: String) -> void:
 	b.enemy.modulate = Color(0.42, 0.42, 0.5)
 	b.enemy.breathing = false
 	b.box.fill = Color(0, 0, 0, 0.55)
-	# 8–24 防火墙
-	await b.run_attack("fin_firewall", 1.0, false, {"rect": FULL, "start_beat": 8.0, "max_beats": 16.0, "keep_box": true, "no_stop": true, "damage": 5, "route": route})
+	# 8–24 蓝屏
+	await b.run_attack("fin_bsod", 1.0, false, {"rect": FULL, "start_beat": 8.0, "max_beats": 16.0, "keep_box": true, "no_stop": true, "damage": 5, "route": route})
 	if b._abort != "":
 		return
-	# 24–32 负片
-	b.set_invert(true)
-	b.enemy.set_param("sil", 1.0)
-	Sfx.play("glitch")
-	await b.run_attack("p1_stream", 1.5, false, {"start_beat": 24.0, "max_beats": 8.0, "keep_box": true, "keep_soul": true, "no_stop": true, "damage": 5})
-	b.set_invert(false)
-	b.enemy.set_param("sil", 0.0)
-	if b._abort != "":
-		return
-	# 32–48 版本号
+	# 24–40 版本号
 	for i in MEDLEY.size():
 		var m: Array = MEDLEY[i]
 		b.big_version = m[2]
 		Sfx.play("version_tick")
 		b.enemy.set_param("glitch", 0.7)
 		b.enemy.tween_param("glitch", 0.0, 0.4)
-		await b.run_attack(m[0], m[1], i % 2 == 1, {"start_beat": 32.0 + 4 * i, "max_beats": 4.0, "keep_box": true, "keep_soul": true, "no_stop": true, "damage": 5})
+		await b.run_attack(m[0], m[1], i % 2 == 1, {"start_beat": 24.0 + 4 * i, "max_beats": 4.0, "keep_box": true, "keep_soul": true, "no_stop": true, "damage": 5})
 		if b._abort != "":
 			return
 	b.big_version = ""
-	# 48–57 Ctrl+A
-	await b.run_attack("fin_ctrl_a", 1.0, false, {"rect": FULL, "start_beat": 48.0, "keep_soul": true, "no_stop": true, "damage": 6, "route": route})
+	# 40–56 巨鲸
+	await b.run_attack("fin_giant", 1.0, false, {"rect": FULL, "start_beat": 40.0, "max_beats": 16.0, "keep_box": true, "keep_soul": true, "no_stop": true, "damage": 5, "route": route})
+	if b._abort != "":
+		return
+	# 56–66 Ctrl+A
+	await b.run_attack("fin_ctrl_a", 1.0, false, {"rect": FULL, "start_beat": 56.0, "keep_soul": true, "no_stop": true, "damage": 6, "route": route})
 	if b._abort != "":
 		return
 	b.soul.active = false

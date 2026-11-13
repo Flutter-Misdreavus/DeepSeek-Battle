@@ -8,7 +8,7 @@ extends SceneTree
 ## - 白色剪影，透明度二值化。
 ## 运行（在仓库根目录）：godot --headless --path game --script ../pipeline/whale_raster.gd
 
-const WIDTHS := [12, 16, 20, 24, 32, 48, 64, 96, 160]
+const WIDTHS := [12, 16, 20, 24, 32, 48, 64, 96, 160, 240]
 const DIRS := 16
 const MASTER_W := 960
 const BODY := Vector2(0.37, 0.39)      # 身体圆心在原图里的位置（按宽度的比例，从左上角量）；和 fx/whale.gd 一致

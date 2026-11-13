@@ -18,7 +18,7 @@ const SHIELD_LEN := 20.0
 const GRAV := 900.0             # 蓝心重力加速度（逻辑像素/秒²）
 const GRAV_HOLD := 420.0        # 按住起跳键往上升时的重力（按得久跳得高）
 const JUMP_V := 210.0           # 起跳速度
-const CUT_V := 60.0             # 松开起跳键时，上升速度最多保留这么多
+const CUT_V := 110.0            # 松开起跳键时，上升速度最多保留这么多（轻点一下约跳 17px，刚好越过一层图标）
 const SLAM_V := 480.0           # 被摔出去的速度
 
 var pos := Vector2(320, 238)
