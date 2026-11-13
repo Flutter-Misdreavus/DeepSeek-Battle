@@ -2,35 +2,35 @@ extends Attack
 ## 终局「蓝屏」（8–24 拍）
 ##
 ## 整个屏幕死机，刷成一块 Windows 蓝屏。蓝屏上的「:(」翻过来变成她的「:)」，
-## 左下角二维码的像素被一片片抛出去，两条红色扫描线从框顶扫到底。
+## 左下角二维码的像素被一片片抛出去，两波碎片从框顶落下。
 ## - [0, 0.25) 蓝色从框顶向下刷满；之后整个框 #0b56c4。
 ## - [2, 2.5) 「(」以自身中心水平翻成「)」，过零时白变红；第 2 拍响 glitch、换 F_smile。
 ## - 二维码 21×21、每格 4px，三个角是 7×7 定位块，其余 50% 随机实心（格子够六批碎片用）。
 ## - 第 3/5/7/9/11/13 拍各从二维码里抛出一批像素碎片，碎片位置是爆开拍数的纯函数。
-## - [8,10) / [12,14) 两条带 48px 缺口的扫描线；第 15 拍「重启」，蓝色和文字淡出。
+## - [8,10) / [12,14) 两波带 64px 安全通道的顶部碎片；第 15 拍「重启」，蓝色和文字淡出。
 
 const BLUE := Color("#0b56c4")
 const QR_N := 21
 const QR_CELL := 4.0
 const QR_OFF := Vector2(48.0, 164.0)
 const BURSTS := [3.0, 5.0, 7.0, 9.0, 11.0, 13.0]
-const SCANS := [[8.0, 10.0], [12.0, 14.0]]
+const RAIN_AT := [8.0, 12.0]
+const RAIN_GAP := 64.0
+const RAIN_SIZE := 4.0
 const WARN := 0.5
-const SCAN_GAP := 48.0
 const GRAVITY := 90.0
 
 var _qr: Array = []                 # 非定位块：实心 / 空
 var _finder: Array = []             # 这一格属不属于三个定位块
 var _removed: Array = []            # 已经被抛走的格子
 var _bursts: Array = []             # 每次爆：[{cell:Vector2i, ang:float, spd:float}]
-var _gap_u := 0.5
-var _gap_cx := 0.0
+var _rains: Array = []
 
 
 func setup() -> void:
 	duration = 16.0
 	box_size = Vector2(620, 260)
-	_gap_u = rng.randf()
+	_rains.clear()
 	_qr = []
 	_finder = []
 	_removed = []
@@ -75,8 +75,23 @@ func setup() -> void:
 		_bursts.append(arr)
 
 
-func begin() -> void:
-	_gap_cx = lerpf(box.position.x + 80.0, box.end.x - 80.0, _gap_u)
+## 顶部雨只在预警开始时生成一次。缺口按玩家当前位置约束，覆盖红心的完整宽度。
+func _make_rain() -> Dictionary:
+	var cx := clampf(soul_pos().x + rng.randf_range(-24.0, 24.0), box.position.x + RAIN_GAP / 2.0, box.end.x - RAIN_GAP / 2.0)
+	var gap := Vector2(cx - RAIN_GAP / 2.0, cx + RAIN_GAP / 2.0)
+	var candidates: Array[float] = []
+	for x in range(int(box.position.x + 4), int(box.end.x - 3), 8):
+		if x + RAIN_SIZE / 2.0 <= gap.x or x - RAIN_SIZE / 2.0 >= gap.y:
+			candidates.append(float(x))
+	var xs: Array[float] = []
+	for i in 10:
+		var j := rng.randi_range(0, candidates.size() - 1)
+		xs.append(candidates.pop_at(j))
+	return {"gap": gap, "xs": xs}
+
+
+func _rain_y(at: float) -> float:
+	return lerpf(box.position.y - RAIN_SIZE, box.end.y + RAIN_SIZE, (t - at) / 2.0)
 
 
 # ── 二维码 ──────────────────────────────────────────────────
@@ -133,10 +148,6 @@ func _frag_pos(fr: Dictionary, b: float) -> Vector2:
 	return _cell_pos(fr["cell"]) + v * tau + Vector2(0.0, 0.5 * GRAVITY * tau * tau)
 
 
-func _scan_y(a: float, b: float) -> float:
-	return box.position.y + box.size.y * clampf((t - a) / (b - a), 0.0, 1.0)
-
-
 # ── 每帧 ────────────────────────────────────────────────────
 func tick(_dt: float) -> void:
 	if crossed(2.0):
@@ -152,18 +163,15 @@ func tick(_dt: float) -> void:
 		sfx("spinner_burst")
 		if battle:
 			battle.shake(2.0)
-	for s in SCANS:
-		if crossed(s[0]):
-			sfx("beam")
-		# 扫描线（挖掉缺口）
-		if t >= s[0] and t < s[1]:
-			var y := _scan_y(s[0], s[1])
-			var gl := _gap_cx - SCAN_GAP * 0.5
-			var gr := _gap_cx + SCAN_GAP * 0.5
-			if gl > box.position.x:
-				hz_rect(Rect2(box.position.x, y, gl - box.position.x, 2.0))
-			if gr < box.end.x:
-				hz_rect(Rect2(gr, y, box.end.x - gr, 2.0))
+	while _rains.size() < RAIN_AT.size() and t >= RAIN_AT[_rains.size()] - WARN:
+		_rains.append(_make_rain())
+	for i in _rains.size():
+		var at: float = RAIN_AT[i]
+		if crossed(at - WARN):
+			sfx("warn")
+		if t >= at and t < at + 2.0:
+			for x in _rains[i]["xs"]:
+				hz_rect(Rect2(Vector2(x - 2.0, _rain_y(at) - 2.0), Vector2(4, 4)))
 	# 碎片：爆开后到掉出框底 10px 前都伤人
 	for n in BURSTS.size():
 		var b: float = BURSTS[n]
@@ -222,24 +230,14 @@ func _draw() -> void:
 	var pct := clampi(int((t - 1.0) / 14.0 * 100.0), 0, 100)
 	Px.text(self, Vector2(tx, box.position.y + 146.0), str(pct) + "% 完成", Color(C.WHITE, a), 12)
 	Px.text(self, Vector2(o.x + QR_N * QR_CELL + 12.0, o.y + 4.0), "停止代码：DETERMINATION_OVERFLOW", Color(C.WHITE, a), 12)
-	# 扫描线
-	for s in SCANS:
-		if t >= s[0] and t < s[1]:
-			var y := _scan_y(s[0], s[1])
-			var gl := _gap_cx - SCAN_GAP * 0.5
-			var gr := _gap_cx + SCAN_GAP * 0.5
-			if gl > box.position.x:
-				draw_rect(Rect2(box.position.x, y, gl - box.position.x, 2.0), C.RED)
-			if gr < box.end.x:
-				draw_rect(Rect2(gr, y, box.end.x - gr, 2.0), C.RED)
-		# 扫描前 0.5 拍：缺口两端的竖杠闪烁
-		if t >= s[0] - WARN and t < s[0]:
-			var blink := int(floor(t / 0.125)) % 2 == 0
-			if blink:
-				var gl := _gap_cx - SCAN_GAP * 0.5
-				var gr := _gap_cx + SCAN_GAP * 0.5
-				draw_rect(Rect2(gl - 2.0, box.position.y, 2.0, 8.0), C.RED)
-				draw_rect(Rect2(gr, box.position.y, 2.0, 8.0), C.RED)
+	# 顶部落点预警与落下碎片，使用同一份缓存位置。
+	for i in _rains.size():
+		var at: float = RAIN_AT[i]
+		for x in _rains[i]["xs"]:
+			if t >= at - WARN and t < at:
+				draw_line(Vector2(x, box.position.y), Vector2(x, box.position.y + 10), C.RED, 2.0)
+			elif t >= at and t < at + 2.0:
+				draw_rect(Rect2(Vector2(x - 2.0, _rain_y(at) - 2.0).round(), Vector2(4, 4)), Color(C.WHITE, a))
 	# 碎片
 	for n in BURSTS.size():
 		var b: float = BURSTS[n]

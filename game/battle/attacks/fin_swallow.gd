@@ -102,7 +102,7 @@ func _visible_errors(now: float) -> Array:
 	var h := r.size.y / BELLY.size.y
 	for k in 3:
 		for i in 50:
-			var x := BELLY.end.x + 20.0 + i * 60.0 - (now - 2.0) * 50.0
+			var x := BELLY.end.x + 20.0 + i * 90.0 + k * 30.0 - (now - 2.0) * 50.0
 			if x < r.position.x - 40.0 or x > r.end.x + 20.0:
 				continue
 			var y := cy + (k - 1) * 50.0 * h + 14.0 * sin(x * 0.04 + k + now * 1.5)

@@ -33,6 +33,8 @@ var finale_done := false
 var spare_touched := false            # 饶恕路线终局 Ctrl+A 时，你伸手碰了她的光标（结局多一句话）
 var event_line := ""                   # 她下回合先说的话（打中她、按了停止之后）
 var next_speed := 1.0
+var _run_seed := 0
+var _attack_serial := 0
 var attack_i := 0
 var talk_i := 0
 var flavor_i := 0
@@ -58,6 +60,8 @@ var big_version := ""                  # 终局里框上方的大号版本号（
 
 func _ready() -> void:
 	auto = Dbg.val("auto")
+	_run_seed = int(Dbg.val("seed")) if Dbg.has("seed") else randi()
+	Dbg.log("战斗随机种子 %d" % _run_seed)
 	for n in [bg, enemy, bubble, box, over, hud, overlay, frame, pause_ui]:
 		add_child(n)
 	box.add_child(soul)
@@ -454,7 +458,8 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 	atk.speed = speed
 	atk.mirror = mirror
 	atk.damage = opts.get("damage", Story.PHASES[phase]["damage"])
-	atk.rng.seed = hash(id) + attack_i * 7919 + int(Dbg.val("seed", "0"))
+	atk.rng.seed = hash(id) + _attack_serial * 7919 + _run_seed
+	_attack_serial += 1
 	atk.opts = opts
 	atk.setup()
 	var size: Vector2 = opts.get("box", atk.box_size)

@@ -7,7 +7,7 @@ extends Attack
 ##   运行时位置只由 t 算出来（一格一格跳，不平滑移动）。
 ## - 落地的格子每帧放进 battle.soul.solids（12×12 完整格），蓝心能站上去、会被挡住。
 ## - 正在下落的格子才伤人（10×10）；落地那一帧也算「正在下落」，之后变成地面。
-## - mirror = true：列号镜像（新列 = 10 - 列 - 方块宽）。
+## - mirror = true：列号与拼块形状同时水平镜像。
 
 const COLS := 10
 const ROWS := 12
@@ -24,6 +24,9 @@ const CLEAR_TEXT := "上下文已压缩"
 const SHAPES := {
 	"I_H": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)],
 	"I_V": [Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 2), Vector2i(0, 3)],
+	"T": [Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1), Vector2i(2, 1)],
+	"S": [Vector2i(1, 0), Vector2i(2, 0), Vector2i(0, 1), Vector2i(1, 1)],
+	"Z": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 1)],
 	"O": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)],
 	"J_H": [Vector2i(0, 0), Vector2i(0, 1), Vector2i(1, 1), Vector2i(2, 1)],
 	"L_H": [Vector2i(2, 0), Vector2i(0, 1), Vector2i(1, 1), Vector2i(2, 1)],
@@ -31,22 +34,17 @@ const SHAPES := {
 
 ## 出场表：[出场拍, 形状, 最左一格所在列]
 const SPAWN := [
-	[1.0, "I_H", 0],
-	[2.5, "I_H", 6],
-	[4.0, "O", 4],
-	[5.5, "J_H", 0],
-	[7.0, "L_H", 7],
-	[8.5, "I_V", 3],
-	[10.0, "I_V", 6],
-	[11.5, "O", 1],
-	[13.0, "O", 4],
-	[14.5, "O", 7],
+	[1.0, "I_H", 0], [2.0, "I_H", 4], [3.0, "O", 8],
+	[4.0, "T", 3], [5.0, "S", 6], [6.0, "Z", 4],
+	[7.0, "J_H", 0], [8.0, "L_H", 1], [9.0, "I_V", 9],
+	[10.0, "O", 7], [11.0, "T", 3], [12.0, "S", 7],
+	[13.0, "Z", 4], [14.0, "I_H", 0],
 ]
 
-# 每块：beat 出场拍 / kind 形状 / col 最左列 / cells 落地格（自己的消行之前）/
-#       land 落地拍 / clear_row 这块落地后填满的行（-1 = 没有）/ clear_at 这行消失的拍
 var _pieces: Array = []
-var _shatter_cells: Array = []             # 最后炸开的格子（setup 里算好）
+var _frames: Array = []
+var _clear_events: Array = []
+var _shatter_cells: Array = []
 
 
 func setup() -> void:
@@ -54,116 +52,123 @@ func setup() -> void:
 	box_size = Vector2(120, 144)
 	soul_mode = "blue"
 	stop_beat = 9.0
-	var board := {}                        # Vector2i -> 第几块
+	_pieces.clear()
+	_frames.clear()
+	_clear_events.clear()
+	_shatter_cells.clear()
 	for item in SPAWN:
-		var beat: float = item[0]
-		var kind: String = item[1]
-		var col: int = item[2]
-		var shape: Array = SHAPES[kind]
 		var width := 0
-		for o in shape:
+		for o in SHAPES[item[1]]:
 			width = maxi(width, o.x + 1)
-		if mirror:
-			col = COLS - col - width
-		# 从顶上第 -3 行往下直落，碰到井底或已有方块就停
-		var top := -3
-		while true:
-			var nxt := top + 1
-			var ok := true
-			for o in shape:
-				var c: int = col + o.x
-				var r: int = nxt + o.y
-				if c < 0 or c >= COLS or r >= ROWS:
-					ok = false
-					break
-				if r >= 0 and board.has(Vector2i(c, r)):
-					ok = false
-					break
-			if not ok:
+		var shape: Array[Vector2i] = []
+		for o in SHAPES[item[1]]:
+			shape.append(Vector2i(width - 1 - o.x, o.y) if mirror else o)
+		var col: int = COLS - item[2] - width if mirror else item[2]
+		_pieces.append({"index": _pieces.size(), "beat": item[0], "kind": item[1], "col": col,
+			"top": -4, "land": INF, "cells": [], "shape": shape})
+	_simulate()
+
+
+func _cells(p: Dictionary, top: int) -> Array:
+	var cells: Array = []
+	for o in p["shape"]:
+		cells.append(Vector2i(p["col"] + o.x, top + o.y))
+	return cells
+
+
+func _full_rows(board: Dictionary) -> Array[int]:
+	var rows: Array[int] = []
+	for y in ROWS:
+		var full := true
+		for x in COLS:
+			if not board.has(Vector2i(x, y)):
+				full = false
 				break
-			top = nxt
-		var land := beat + (top + 3) * FALL_STEP
-		var cells := []
-		for o in shape:
-			var cell := Vector2i(col + o.x, top + o.y)
-			cells.append(cell)
-			if cell.y >= 0:
-				board[cell] = _pieces.size()
-		# 这块落地后有没有填满的行（本表最多一行；有就立刻在模拟里消掉，给下一块用）
-		var clear_row := -1
-		for r in range(ROWS - 1, -1, -1):
-			var full := true
-			for c in COLS:
-				if not board.has(Vector2i(c, r)):
-					full = false
-					break
-			if full:
-				clear_row = r
-				break
-		var clear_at := -1.0
-		if clear_row >= 0:
-			clear_at = land + CLEAR_FLASH
-			var shifted := {}
-			for cell in board:
-				if cell.y == clear_row:
-					continue
-				var nc: Vector2i = cell if cell.y > clear_row else Vector2i(cell.x, cell.y + 1)
-				shifted[nc] = board[cell]
-			board = shifted
-		_pieces.append({
-			"beat": beat, "kind": kind, "col": col, "cells": cells, "top": top,
-			"land": land, "clear_row": clear_row, "clear_at": clear_at,
-		})
+		if full:
+			rows.append(y)
+	return rows
+
+
+## 一次同时移除所有满行，上方格子按实际移除行数下移。
+func _clear_board(board: Dictionary, rows: Array[int]) -> Dictionary:
+	var shifted := {}
 	for cell in board:
-		_shatter_cells.append(cell)
+		if rows.has(cell.y):
+			continue
+		var drop := 0
+		for row in rows:
+			if row > cell.y:
+				drop += 1
+		shifted[Vector2i(cell.x, cell.y + drop)] = board[cell]
+	return shifted
 
 
-func begin() -> void:
-	pass
+## 按真实时间预模拟：下落物互相阻挡时先等待，落地及延迟消行后再更新地面。
+func _simulate() -> void:
+	var board := {}
+	var clear_at := INF
+	for step in int(SHATTER_BOOM / FALL_STEP):
+		var now := step * FALL_STEP
+		if now >= clear_at:
+			var rows := _full_rows(board)
+			board = _clear_board(board, rows)
+			_clear_events.append({"at": now, "rows": rows})
+			clear_at = INF
+		for p in _pieces:
+			if now <= p["beat"] or p["land"] < INF:
+				continue
+			var want := _cells(p, p["top"] + 1)
+			var blocked := false
+			for cell in want:
+				if cell.y >= ROWS or board.has(cell):
+					blocked = true
+					break
+			if not blocked:
+				var waiting := false
+				for other in _pieces:
+					if other == p or now < other["beat"] or other["land"] < INF:
+						continue
+					for cell in _cells(other, other["top"]):
+						if want.has(cell):
+							waiting = true
+				if not waiting:
+					p["top"] += 1
+				continue
+			p["land"] = now
+			p["cells"] = _cells(p, p["top"])
+			for cell in p["cells"]:
+				assert(cell.y >= 0 and cell.y < ROWS, "方块不能堆出井顶")
+				board[cell] = p["index"]
+			if not _full_rows(board).is_empty() and clear_at == INF:
+				clear_at = now + CLEAR_FLASH
+		var tops: Array[int] = []
+		for p in _pieces:
+			tops.append(p["top"])
+		_frames.append({"board": board.duplicate(), "tops": tops, "flash": _full_rows(board)})
+	for p in _pieces:
+		assert(p["land"] < SHATTER_AT, "所有方块必须在全清前落地")
+	_shatter_cells = board.keys()
 
-
-# ── 坐标 / 时间 ──────────────────────────────────────────────
 
 func _cell_rect(cell: Vector2i) -> Rect2:
 	return Rect2(box.position + Vector2(cell.x, cell.y) * CELL, Vector2(CELL, CELL))
 
 
-## 下落中的方块当前最上面一行（一格一格跳，落地后夹住）
+func _frame_at(now: float) -> Dictionary:
+	return _frames[clampi(floori(now / FALL_STEP + 0.000001), 0, _frames.size() - 1)]
+
+
 func _fall_top(p: Dictionary, now: float) -> int:
-	var rows := floori((now - p["beat"]) / FALL_STEP)
-	return mini(-3 + rows, p["top"])
+	return _frame_at(now)["tops"][p["index"]]
 
 
-## 拍 now 的场地：Vector2i -> 第几块。把已落地的块按顺序摆好，再按时间消行。
 func _board_at(now: float) -> Dictionary:
-	var board := {}
-	if now >= SHATTER_BOOM:
-		return board
-	for i in _pieces.size():
-		var p: Dictionary = _pieces[i]
-		if now >= p["land"]:
-			for cell in p["cells"]:
-				if cell.y >= 0:
-					board[cell] = i
-		var cr: int = p["clear_row"]
-		if cr >= 0 and now >= p["clear_at"]:
-			var shifted := {}
-			for cell in board:
-				if cell.y == cr:
-					continue
-				var nc: Vector2i = cell if cell.y > cr else Vector2i(cell.x, cell.y + 1)
-				shifted[nc] = board[cell]
-			board = shifted
-	return board
+	return {} if now >= SHATTER_BOOM else _frame_at(now)["board"]
 
 
-## 正在闪的那一行（没有 = -1）和它这一刻的颜色
 func _flash_row(now: float) -> Array:
-	for p in _pieces:
-		if p["clear_row"] >= 0 and now >= p["land"] and now < p["clear_at"]:
-			var col := C.WHITE if floori((now - p["land"]) / FLASH_STEP) % 2 == 0 else C.SYS
-			return [p["clear_row"], col]
-	return [-1, C.WHITE]
+	var col := C.WHITE if floori(now / FLASH_STEP) % 2 == 0 else C.SYS
+	return [_frame_at(now)["flash"], col]
 
 
 # ── 每帧 ──────────────────────────────────────────────────────
@@ -177,7 +182,8 @@ func tick(_dt: float) -> void:
 			sfx("brick")
 			if battle:
 				battle.shake(1.0)
-		if p["clear_row"] >= 0 and crossed(p["clear_at"]):
+	for event in _clear_events:
+		if crossed(event["at"]):
 			sfx("delete")
 			if battle:
 				battle.shake(2.0)
@@ -187,9 +193,9 @@ func tick(_dt: float) -> void:
 			battle.shake(3.0)
 	# 下落中的格子伤人（落地那一帧也算，之后就是地面了）
 	for p in _pieces:
-		if t < p["land"]:
+		if t >= p["beat"] and t < p["land"]:
 			var top := _fall_top(p, t)
-			for o in SHAPES[p["kind"]]:
+			for o in p["shape"]:
 				hz_rect(_cell_rect(Vector2i(p["col"] + o.x, top + o.y)).grow(-1))
 		elif crossed(p["land"]):
 			for cell in p["cells"]:
@@ -204,13 +210,9 @@ func tick(_dt: float) -> void:
 
 # ── 画 ────────────────────────────────────────────────────────
 
-## 普通格：10×10 白块 + 中间 4×4 黑孔；I 形四格画成小鲸鱼
-func _draw_cell(cell: Vector2i, kind: String, col: Color) -> void:
+## 所有形状统一使用 10×10 方格和 4×4 黑孔。
+func _draw_cell(cell: Vector2i, _kind: String, col: Color) -> void:
 	var r := _cell_rect(cell)
-	if kind == "I_H" or kind == "I_V":
-		var dir := Vector2.RIGHT if kind == "I_H" else Vector2.DOWN
-		Whale.draw(self, r.get_center(), dir, 12, col)
-		return
 	var b := Rect2((r.position + Vector2.ONE).round(), Vector2(10, 10))
 	draw_rect(b, col)
 	draw_rect(Rect2(b.position + Vector2(3, 3), Vector2(4, 4)), C.BLACK)
@@ -235,7 +237,7 @@ func _draw() -> void:
 		var col := C.WHITE
 		if final_flash:
 			col = final_col
-		elif cell.y == fr[0]:
+		elif (fr[0] as Array).has(cell.y):
 			col = fr[1]
 		_draw_cell(cell, kind, col)
 	# 正在下落的方块
@@ -243,7 +245,7 @@ func _draw() -> void:
 		if now < p["beat"] or now >= p["land"]:
 			continue
 		var top := _fall_top(p, now)
-		for o in SHAPES[p["kind"]]:
+		for o in p["shape"]:
 			_draw_cell(Vector2i(p["col"] + o.x, top + o.y), p["kind"], C.WHITE)
 	# 全清：每格 4 个 2×2 白碎块往四个斜方向飞 10px，0.5 拍淡出
 	if now >= SHATTER_BOOM and now < SHATTER_BOOM + 0.5:
@@ -256,8 +258,8 @@ func _draw() -> void:
 				var p: Vector2 = c + d.normalized() * 10.0 * u
 				draw_rect(Rect2(p.round() - Vector2.ONE, Vector2(2, 2)), Color(C.WHITE, a))
 	# 消行提示：框顶居中 1 拍
-	for p in _pieces:
-		if p["clear_row"] >= 0 and now >= p["clear_at"] and now < p["clear_at"] + 1.0:
+	for event in _clear_events:
+		if now >= event["at"] and now < event["at"] + 1.0:
 			var w := Px.text_w(CLEAR_TEXT)
 			Px.text(self, Vector2(box.get_center().x - w / 2.0, box.position.y + 2.0), CLEAR_TEXT, C.SYS)
 	# 全清提示：框中间 1.5 拍

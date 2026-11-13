@@ -6,7 +6,7 @@ extends Attack
 ## - 每一步：[s, s+1) 拖框，[s+1, s+2) 保持，[s+2, s+2.5) 删除伤人（白色闪一下），之后 0.3 拍淡出。
 ## - 两步之间光标从上一处终点直线移到下一步的起点，攻击开始前不画。
 ## - 框里一直躺着 6 行淡灰的旧对话；每一步删除结束后，被删过的那片区域永久变黑。
-## - mirror = true 时选框左右镜像。
+## - 选框在每步预警时生成，保留靠近当前玩家的安全区域；绘制和碰撞共用缓存。
 
 const CHAT := [
 	"用户：你好",
@@ -18,41 +18,71 @@ const CHAT := [
 ]
 
 const STEPS := [
-	{"s": 0.0, "rects": [[0.05, 0.05, 0.60, 0.55]], "inv": false},
-	{"s": 2.0, "rects": [[0.40, 0.45, 0.95, 0.95]], "inv": false},
-	{"s": 4.0, "rects": [[0.05, 0.50, 0.50, 0.95], [0.55, 0.05, 0.95, 0.50]], "inv": false},
-	{"s": 6.0, "rects": [[0.00, 0.00, 0.45, 0.45], [0.55, 0.55, 1.00, 1.00]], "inv": false},
-	{"s": 8.0, "rects": [[0.15, 0.00, 0.85, 0.35], [0.15, 0.65, 0.85, 1.00]], "inv": false},
-	{"s": 11.0, "rects": [[0.40, 0.38, 0.66, 0.72]], "inv": true},
-	{"s": 14.0, "rects": [[0.08, 0.10, 0.34, 0.44]], "inv": true},
+	{"s": 0.0, "inv": false}, {"s": 2.0, "inv": false},
+	{"s": 4.0, "inv": false}, {"s": 6.0, "inv": false},
+	{"s": 8.0, "inv": false}, {"s": 11.0, "inv": true},
+	{"s": 14.0, "inv": true},
 ]
+const SAFE_SIZE := Vector2(52, 44)
+var _rects: Array = []
+var _safe: Array[Rect2] = []
+var _player_at_warning: Array[Vector2] = []
 
 
 func setup() -> void:
 	duration = 17.5
 	box_size = Vector2(200, 130)
 	stop_beat = 9.0
+	_rects.clear()
+	_safe.clear()
+	_player_at_warning.clear()
 
 
-## 某一步的矩形（框内绝对坐标，已按 mirror 翻转 x）
+func _safe_distance(r: Rect2, player: Vector2) -> float:
+	var stand := Rect2(r.position + C.SOUL_HALF, r.size - 2.0 * C.SOUL_HALF)
+	return player.distance_to(player.clamp(stand.position, stand.end))
+
+
+func _sample_safe() -> Rect2:
+	var player := soul_pos()
+	for attempt in 32:
+		var p := player - SAFE_SIZE * 0.5 + Vector2(rng.randf_range(-40.0, 40.0), rng.randf_range(-36.0, 36.0))
+		p = p.round().clamp(box.position, box.end - SAFE_SIZE)
+		var r := Rect2(p, SAFE_SIZE)
+		if _safe_distance(r, player) <= 32.0:
+			return r
+	# 近邻网格中的合法点，有限遍历且保留完整安全框。
+	for y in range(int(box.position.y), int(box.end.y - SAFE_SIZE.y) + 1, 4):
+		for x in range(int(box.position.x), int(box.end.x - SAFE_SIZE.x) + 1, 4):
+			var r := Rect2(Vector2(x, y), SAFE_SIZE)
+			if _safe_distance(r, player) <= 32.0:
+				return r
+	assert(false, "框选删除必须有可达安全区")
+	return Rect2(box.position, SAFE_SIZE)
+
+
+func _generate_step(i: int) -> void:
+	var safe := _sample_safe()
+	_safe.append(safe)
+	_player_at_warning.append(soul_pos())
+	if STEPS[i]["inv"]:
+		_rects.append([safe])
+		return
+	# 在安全框以外选一至两块旧对话删除，不侵占已承诺的安全区。
+	var regions := _outside(safe)
+	var selected: Array = []
+	var want := 1 if i < 2 else 2
+	while not regions.is_empty() and selected.size() < want:
+		var j := rng.randi_range(0, regions.size() - 1)
+		var r: Rect2 = regions.pop_at(j)
+		if r.size.x >= 12.0 and r.size.y >= 12.0:
+			selected.append(r)
+	assert(not selected.is_empty())
+	_rects.append(selected)
+
+
 func _step_rects(i: int) -> Array:
-	var out: Array = []
-	for q in STEPS[i]["rects"]:
-		var x0: float = q[0]
-		var y0: float = q[1]
-		var x1: float = q[2]
-		var y1: float = q[3]
-		if mirror:
-			var nx0 := 1.0 - x1
-			x1 = 1.0 - x0
-			x0 = nx0
-		out.append(Rect2(
-			box.position.x + x0 * box.size.x,
-			box.position.y + y0 * box.size.y,
-			(x1 - x0) * box.size.x,
-			(y1 - y0) * box.size.y
-		))
-	return out
+	return _rects[i] if i < _rects.size() else []
 
 
 ## 一个矩形从左上拖到右下，u 是拖框进度
@@ -123,7 +153,7 @@ func _drag_tip(i: int) -> Vector2:
 
 func _step_at(now: float) -> int:
 	var idx := -1
-	for i in STEPS.size():
+	for i in _rects.size():
 		if now >= STEPS[i]["s"]:
 			idx = i
 	return idx
@@ -138,7 +168,7 @@ func _cursor_pos() -> Vector2:
 	if t < s + 1.0:
 		return _drag_tip(idx)
 	var end := _last_corner(idx)
-	if idx + 1 >= STEPS.size():
+	if idx + 1 >= _rects.size():
 		return end
 	var next_s: float = STEPS[idx + 1]["s"]
 	var next_tl: Vector2 = _step_rects(idx + 1)[0].position
@@ -154,7 +184,9 @@ func _deleted_rects(i: int) -> Array:
 
 
 func tick(_dt: float) -> void:
-	for i in STEPS.size():
+	while _rects.size() < STEPS.size() and t >= STEPS[_rects.size()]["s"]:
+		_generate_step(_rects.size())
+	for i in _rects.size():
 		var s: float = STEPS[i]["s"]
 		if crossed(s):
 			sfx("marquee")
@@ -162,7 +194,7 @@ func tick(_dt: float) -> void:
 		if crossed(s + 2.0):
 			sfx("delete")
 	# 删除期间才伤人：删掉的区域向内缩 1px 登记
-	for i in STEPS.size():
+	for i in _rects.size():
 		var s: float = STEPS[i]["s"]
 		if t < s + 2.0 or t >= s + 2.5:
 			continue
@@ -181,13 +213,13 @@ func _draw() -> void:
 	# 0) 框里的旧对话；已经删过的区域涂黑，旧对话随之永久消失
 	for i in CHAT.size():
 		Px.text(self, Vector2(box.position.x + 6.0, box.position.y + 18.0 + i * 18.0), CHAT[i], C.GRAY_DIM)
-	for i in STEPS.size():
+	for i in _rects.size():
 		if t < float(STEPS[i]["s"]) + 2.5:
 			continue
 		for r in _deleted_rects(i):
 			_fill(r, C.BLACK)
 	# 1) 选框内部的淡蓝（反选则是框外整片淡蓝）
-	for i in STEPS.size():
+	for i in _rects.size():
 		var cur := _active_rects(i)
 		if cur.is_empty():
 			continue
@@ -199,7 +231,7 @@ func _draw() -> void:
 			for r in cur:
 				_fill(r, col)
 	# 2) 删除的白块（白色 = 伤害），最后 0.3 拍淡出
-	for i in STEPS.size():
+	for i in _rects.size():
 		var s: float = STEPS[i]["s"]
 		var ds := s + 2.0
 		if t < ds or t >= ds + 0.8:
@@ -212,18 +244,18 @@ func _draw() -> void:
 		for r in _deleted_rects(i):
 			_fill(r, Color(C.WHITE, a))
 	# 3) 蚂蚁线画在白块上面，保证还看得见
-	for i in STEPS.size():
+	for i in _rects.size():
 		for r in _active_rects(i):
 			Px.dashed(self, r, C.SYS, t * 12.0)
 	# 4) 反选提示：选中快结束时闪「反选」
-	for i in STEPS.size():
+	for i in _rects.size():
 		if not STEPS[i]["inv"]:
 			continue
 		var s: float = STEPS[i]["s"]
 		if t >= s + 1.5 and t < s + 2.0 and int(t * 4.0) % 2 == 0:
 			Px.text(self, box.position + Vector2(4, 2), "反选", C.SYS)
 	# 5) 蓝色系统光标
-	if t >= 0.0:
+	if not _rects.is_empty():
 		Px.cursor(self, _cursor_pos(), C.SYS)
 	# 6) 开头 1 拍的提示
 	if t < 1.0:

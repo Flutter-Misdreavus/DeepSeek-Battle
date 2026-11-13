@@ -1,45 +1,41 @@
 extends Attack
-## P2-3「知识蒸馏」
-##
-## 一条大鲸鱼（「教师模型」）分裂成两条，再分裂……越分越小、越分越多，沿弧线散开。
-## 梗：大模型蒸馏出小模型。
-## - 两波分裂树：A 波教师从框上方游进来，2.5 拍第一次分裂；B 波从框左边（mirror 时右边）进来，10.5 拍。
-## - 第 1 / 2 / 3 代宽 32 / 24 / 16，分别在 S0+1 / S0+2 分裂，孩子从父亲当时的位置和前进方向 ±55° / ±28° / ±14° 出发（整棵树长成扇形）。
-## - 孩子的圆弧位置是解析的纯函数；教师停住时也是伤害，孩子分裂前 0.75 拍闪白/蓝并涨到 1.15 倍。
-## - 第 3 代游出框外 20px 后不再画也不判定。
-## - 字幕逐段显示蒸馏进度；B 波重新从 671B 开始。
+## 知识蒸馏：教师鲸鱼逐代分裂，小鲸鱼以有限转向的鱼群运动追踪玩家。
+## 所有个体读取同一份快照；固定 1/120 拍子步保证帧率与暂停不改变分裂时序。
 
 const WAVE_START := [0.0, 8.0]
 const FIRST_SPLIT := [2.5, 10.5]
-const ENTER_LEN := 1.0
-const SPLIT_GAP := 1.0
 const WIDTHS := [48, 32, 24, 16]
 const SPEEDS := [0.0, 30.0, 34.0, 38.0]
-const TURNS := [0.0, 0.0, 0.0, 0.2]
-const DELTAS := [0.0, deg_to_rad(55.0), deg_to_rad(28.0), deg_to_rad(14.0)]   # 分叉角一代比一代窄：整棵树往下长成扇形，铺满框
+const DELTAS := [0.0, deg_to_rad(55.0), deg_to_rad(28.0), deg_to_rad(14.0)]
 const WARN_LEN := 0.75
 const WARN_SCALE := 1.15
 const GROW_LEN := 0.2
-const GEN3_PAD := 20.0
+const SPLIT_GAP := 1.0
 const NO_SPLIT := 1e9
-
+const STEP := 1.0 / 120.0
+const TURN := PI / 3.0
+const NEIGHBOR_R := 80.0
+const GEN3_LIFE := 4.0
 var _tree: Array = []
 var _built := false
+var _simulated := 0.0
 
 
 func setup() -> void:
 	duration = 17.0
 	box_size = Vector2(220, 140)
 	stop_beat = 8.0
+	_tree.clear()
+	_built = false
+	_simulated = 0.0
 	var r := C.dodge_box(box_size.x, box_size.y)
-	stop_spot = Vector2(r.end.x - 24.0, r.end.y - 14.0)   # 放右下角，别压住左上的蒸馏字幕
+	stop_spot = Vector2(r.end.x - 24.0, r.end.y - 14.0)
 
 
 func begin() -> void:
 	pose("summon")
+	_build()
 
-
-# ── 分裂树 ────────────────────────────────────────────────────
 
 func _build() -> void:
 	if _built:
@@ -47,90 +43,128 @@ func _build() -> void:
 	_built = true
 	var c := box.get_center()
 	for wave in 2:
-		var root: Dictionary
-		if wave == 0:
-			root = {
-				"gen": 0, "width": WIDTHS[0], "wave": wave,
-				"p0": Vector2(c.x, box.position.y - 30.0),
-				"p1": Vector2(c.x, box.position.y + 30.0),
-				"th0": PI / 2.0, "w": 0.0, "v": 0.0,
-				"birth": WAVE_START[0], "split": FIRST_SPLIT[0],
-			}
-		else:
-			var base := PI if mirror else 0.0
-			var p0 := Vector2(box.end.x + 30.0, c.y - 10.0) if mirror else Vector2(box.position.x - 30.0, c.y - 10.0)
-			var p1 := Vector2(box.end.x - 34.0, c.y - 10.0) if mirror else Vector2(box.position.x + 34.0, c.y - 10.0)
-			root = {
-				"gen": 0, "width": WIDTHS[0], "wave": wave,
-				"p0": p0, "p1": p1,
-				"th0": base, "w": 0.0, "v": 0.0,
-				"birth": WAVE_START[1], "split": FIRST_SPLIT[1],
-			}
-		_tree.append(root)
-		_children(root, 1)
+		var p0 := Vector2(c.x, box.position.y - 30.0)
+		var p1 := Vector2(c.x, box.position.y + 30.0)
+		var heading := PI / 2.0
+		if wave == 1:
+			p0 = Vector2(box.end.x + 30.0, c.y - 10.0) if mirror else Vector2(box.position.x - 30.0, c.y - 10.0)
+			p1 = Vector2(box.end.x - 34.0, c.y - 10.0) if mirror else Vector2(box.position.x + 34.0, c.y - 10.0)
+			heading = PI if mirror else 0.0
+		_tree.append({"gen": 0, "width": WIDTHS[0], "wave": wave, "p0": p0, "p1": p1,
+			"pos": p0, "heading": heading, "birth": WAVE_START[wave], "split": FIRST_SPLIT[wave],
+			"gone": false, "split_done": false})
 
 
-## 在父亲的分裂时刻，按父亲的位置和前进方向造两个孩子；再递归往下
-func _children(parent: Dictionary, gen: int) -> void:
-	if gen > 3:
-		return
-	var at: float = parent["split"]
-	var p := _pos(parent, at)
-	var th := _theta(parent, at)
+func _alive(n: Dictionary, now: float) -> bool:
+	return not n["gone"] and now >= n["birth"] and now < n["split"] and (n["gen"] < 3 or now < n["birth"] + GEN3_LIFE)
+
+
+func _children(parent: Dictionary, now: float) -> void:
+	var gen: int = parent["gen"] + 1
+	var radius := Whale.radius(WIDTHS[gen]) * 0.6 + 3.0
+	var side_dir := Vector2.from_angle(parent["heading"] + PI / 2.0)
 	for side in [-1, 1]:
-		var child := {
-			"gen": gen, "width": WIDTHS[gen], "wave": parent["wave"],
-			"p0": p,
-			"th0": th + side * DELTAS[gen],
-			"w": side * TURNS[gen],
-			"v": SPEEDS[gen],
-			"birth": at,
-			"split": ((at + SPLIT_GAP) if gen < 3 else NO_SPLIT),
-			"entered": false, "gone": false,
-		}
-		_tree.append(child)
-		if gen < 3:
-			_children(child, gen + 1)
+		var pos: Vector2 = parent["pos"] + side_dir * radius * side
+		_tree.append({"gen": gen, "width": WIDTHS[gen], "wave": parent["wave"], "pos": pos,
+			"heading": parent["heading"] + side * DELTAS[gen], "birth": now,
+			"split": now + SPLIT_GAP if gen < 3 else NO_SPLIT, "gone": false, "split_done": false})
 
 
-# ── 位置（t 的纯函数）────────────────────────────────────────
+func _step(now: float, dt: float) -> void:
+	var snapshot: Array = []
+	for i in _tree.size():
+		var n: Dictionary = _tree[i]
+		if n["gen"] == 0:
+			n["pos"] = (n["p0"] as Vector2).lerp(n["p1"], clampf(now - n["birth"], 0.0, 1.0))
+		elif _alive(n, now - dt):
+			snapshot.append({"i": i, "pos": n["pos"], "heading": n["heading"], "width": n["width"], "wave": n["wave"]})
+	var updates: Array = []
+	for item in snapshot:
+		var n: Dictionary = _tree[item["i"]]
+		var pos: Vector2 = item["pos"]
+		var separation := Vector2.ZERO
+		var alignment := Vector2.ZERO
+		var center := Vector2.ZERO
+		var neighbors := 0
+		for other in snapshot:
+			if other["i"] == item["i"] or other["wave"] != item["wave"]:
+				continue
+			var away: Vector2 = pos - other["pos"]
+			var distance := away.length()
+			if distance > NEIGHBOR_R:
+				continue
+			neighbors += 1
+			center += other["pos"]
+			alignment += Vector2.from_angle(other["heading"])
+			var spacing := Whale.radius(item["width"]) + Whale.radius(other["width"]) + 6.0
+			if distance < spacing:
+				var direction := away / distance if distance > 0.001 else Vector2.from_angle(float(item["i"]) * 2.4)
+				separation += direction * (1.0 - distance / spacing)
+		var desired := (soul_pos() - pos).normalized() * 1.3 + separation * 2.0
+		if neighbors > 0:
+			desired += alignment.normalized() * 0.45 + (center / neighbors - pos).normalized() * 0.25
+		var heading: float = item["heading"]
+		if desired.length_squared() > 0.0001:
+			heading += clampf(angle_difference(heading, desired.angle()), -TURN * dt, TURN * dt)
+		var move_dt := minf(dt, maxf(0.0, float(n["split"]) - (now - dt)))
+		updates.append({"i": item["i"], "heading": heading, "pos": pos + Vector2.from_angle(heading) * SPEEDS[n["gen"]] * move_dt})
+	for update in updates:
+		var n: Dictionary = _tree[update["i"]]
+		n["heading"] = update["heading"]
+		n["pos"] = update["pos"]
+	var split := false
+	# 在所有父鲸鱼移动完后统一分裂，避免数组遍历顺序改变运动结果。
+	var count := _tree.size()
+	for i in count:
+		var n: Dictionary = _tree[i]
+		if not n["split_done"] and n["gen"] < 3 and now + 0.000001 >= n["split"]:
+			n["split_done"] = true
+			_children(n, n["split"])
+			split = true
+		if n["gen"] == 3 and (now >= n["birth"] + GEN3_LIFE or not box.grow(20.0).has_point(n["pos"])):
+			n["gone"] = true
+	_resolve_separation(now)
+	if split:
+		sfx("spinner_burst")
 
-func _pos(n: Dictionary, now: float) -> Vector2:
-	if int(n["gen"]) == 0:
-		var k := clampf((now - float(n["birth"])) / ENTER_LEN, 0.0, 1.0)
-		var a: Vector2 = n["p0"]
-		var b: Vector2 = n["p1"]
-		return a.lerp(b, k)
-	var tau := now - float(n["birth"])
-	if tau <= 0.0:
-		return n["p0"]
-	var th0: float = n["th0"]
-	var w: float = n["w"]
-	var v: float = n["v"]
-	var p0: Vector2 = n["p0"]
-	if absf(w) < 1e-6:                    # 不拐弯：直线
-		return p0 + Vector2(cos(th0), sin(th0)) * v * tau
-	var th := th0 + w * tau
-	return p0 + (v / w) * Vector2(sin(th) - sin(th0), -(cos(th) - cos(th0)))
+
+## 接触分离采用同步位置修正，避免有限转向的鱼迎头相撞后重叠成一团。
+func _resolve_separation(now: float) -> void:
+	var live: Array = []
+	for n in _tree:
+		if n["gen"] > 0 and _alive(n, now):
+			live.append(n)
+	for iteration in 12:
+		var corrections: Array[Vector2] = []
+		corrections.resize(live.size())
+		corrections.fill(Vector2.ZERO)
+		var changed := false
+		for i in live.size():
+			for j in i:
+				var delta: Vector2 = live[i]["pos"] - live[j]["pos"]
+				var distance := delta.length()
+				var spacing := Whale.radius(live[i]["width"]) * _scale(live[i], now) + Whale.radius(live[j]["width"]) * _scale(live[j], now) + 6.0
+				if distance >= spacing - 0.001:
+					continue
+				var dir := delta / distance if distance > 0.001 else Vector2.from_angle(float(i + j) * 2.4)
+				var push := dir * (spacing - distance) * 0.5
+				corrections[i] += push
+				corrections[j] -= push
+				changed = true
+		for i in live.size():
+			live[i]["pos"] += corrections[i]
+		if not changed:
+			break
 
 
-func _theta(n: Dictionary, now: float) -> float:
-	if int(n["gen"]) == 0:
-		return n["th0"]
-	return float(n["th0"]) + float(n["w"]) * (now - float(n["birth"]))
+func _pos(n: Dictionary, _now: float) -> Vector2:
+	return n["pos"]
 
 
-## 画鲸鱼用的前进方向：第 0 代是进场方向，其余是圆弧切线
-func _dir(n: Dictionary, now: float) -> Vector2:
-	if int(n["gen"]) == 0:
-		var a: Vector2 = n["p0"]
-		var b: Vector2 = n["p1"]
-		return (b - a).normalized()
-	var th := _theta(n, now)
-	return Vector2(cos(th), sin(th))
+func _dir(n: Dictionary, _now: float) -> Vector2:
+	return Vector2.from_angle(n["heading"])
 
 
-## 分裂前 0.75 拍：白 / 蓝闪烁，同时 1.0 → 1.15 放大
 func _scale(n: Dictionary, now: float) -> float:
 	var s := 1.0
 	if int(n["gen"]) > 0:
@@ -149,46 +183,19 @@ func _color(n: Dictionary, now: float) -> Color:
 	return C.WHITE
 
 
-func _alive(n: Dictionary, now: float) -> bool:
-	if now < float(n["birth"]) or now >= float(n["split"]):
-		return false
-	if int(n["gen"]) == 3:
-		if bool(n["gone"]):
-			return false
-		# 出生就在框外 20px 之外的（A 波上面那 4 条）先留着，等它绕回来；
-		# 一旦进过框、再游出 20px，就永久不再处理。
-		if bool(n["entered"]) and not box.grow(GEN3_PAD).has_point(_pos(n, now)):
-			return false
-	return true
-
-
-# ── 每帧 ──────────────────────────────────────────────────────
-
 func tick(_dt: float) -> void:
 	if not _built:
 		_build()
+	while _simulated + STEP <= t + 0.000001:
+		_step(_simulated + STEP, STEP)
+		_simulated += STEP
 	for wave in 2:
 		if crossed(WAVE_START[wave]):
 			pose("summon")
 			sfx("whale", 0.7)
 	for n in _tree:
-		var sp: float = n["split"]
-		if sp < NO_SPLIT and crossed(sp):
-			sfx("spinner_burst")
-	# 第 3 代：记录「进过框」，以及「进过框之后再出框 20px」→ 永久消失
-	for n in _tree:
-		if int(n["gen"]) != 3 or bool(n["gone"]):
-			continue
-		if t < float(n["birth"]):
-			continue
-		if box.grow(GEN3_PAD).has_point(_pos(n, t)):
-			n["entered"] = true
-		elif bool(n["entered"]):
-			n["gone"] = true
-	for n in _tree:
-		if not _alive(n, t):
-			continue
-		hz_circle(_pos(n, t), Whale.radius(int(n["width"])) * _scale(n, t))
+		if _alive(n, t):
+			hz_circle(_pos(n, t), Whale.radius(n["width"]) * _scale(n, t))
 
 
 func _caption() -> String:

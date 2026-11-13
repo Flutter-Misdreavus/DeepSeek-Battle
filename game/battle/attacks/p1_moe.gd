@@ -4,7 +4,7 @@ extends Attack
 ## DeepSeek 是混合专家模型：框上方 8 个专家格子，每一拍只激活其中几列，被选中的列向下射光束。
 ## - 第 b 拍（b = 1…12）先选 k 列闪蚂蚁线，下一拍从这些列射出光束。
 ## - 选列时保证至少有两列相邻的列没被选中，所以框里始终有一条 48px 宽的安全区。
-## - b ≤ 6 激活 2 列；7–9 激活 3 列；10–12 激活 4 列。所有选择在 setup() 里用 rng 算好。
+## - b ≤ 6 激活 2 列；7–9 激活 3 列；10–12 激活 4 列。每次预警时按玩家位置随机选择并缓存。
 ## - 光束持续 0.6 拍，最后 0.2 拍收窄；伤害只在 [b+1, b+1.5)。
 ## - mirror = true 时第 i 列画到第 7-i 列的位置。
 
@@ -17,7 +17,7 @@ const CELL_SIZE := Vector2(20, 13)
 const OUTER_W := 20.0
 const CORE_W := 10.0
 
-var _picks: Array = []             # 12 次选择，每次是一个按列号排序的 Array[int]
+var _picks: Array = []             # 每次预警追加一组已确定的列号，最多12组
 var _posed_a := false
 
 
@@ -25,38 +25,42 @@ func setup() -> void:
 	duration = 14.5
 	box_size = Vector2(192, 116)
 	stop_beat = 7.0
-	for b in range(1, SELECT_BEATS + 1):
-		var k := 2 if b <= 6 else (3 if b <= 9 else 4)
+	_picks.clear()
+
+
+## 每次预警时才抽列：保留相邻两列，且在上一束光消退后仍来得及移入。
+func _choose_columns() -> Array:
+	var b := _picks.size() + 1
+	var count := 2 if b <= 6 else (3 if b <= 9 else 4)
+	var candidates: Array = []
+	for mask in 256:
 		var pick: Array = []
-		while true:
-			# 从 0–7 里不放回地抽 k 个不同的列
-			var pool: Array = []
-			for i in COLS:
-				pool.append(i)
-			pick = []
-			while pick.size() < k:
-				var j := rng.randi_range(0, pool.size() - 1)
-				pick.append(pool[j])
-				pool.remove_at(j)
-			pick.sort()
-			if _pick_ok(pick):
-				break
-		_picks.append(pick)
-	# 自检用：把 12 次选择打印出来
-	var parts := PackedStringArray()
-	for p in _picks:
-		parts.append(str(p))
-	print("[p1_moe] 12 次路由: " + " ".join(parts))
+		for col in COLS:
+			if mask & (1 << col):
+				pick.append(col)
+		if pick.size() == count and _pick_ok(pick):
+			candidates.append(pick)
+	assert(not candidates.is_empty(), "MoE 必须存在可达的安全列")
+	return candidates[rng.randi_range(0, candidates.size() - 1)]
 
 
-## 这次选择是否合法：和上一次不完全相同，且至少有两列相邻的列没被选中
+func _safe_distance(pick: Array, x: float) -> float:
+	var nearest := INF
+	for i in COLS - 1:
+		if pick.has(i) or pick.has(i + 1):
+			continue
+		var left := minf(_col_x(i), _col_x(i + 1)) + C.SOUL_HALF.x + 1.0
+		var right := maxf(_col_x(i), _col_x(i + 1)) + COL_W - C.SOUL_HALF.x - 1.0
+		nearest = minf(nearest, absf(x - clampf(x, left, right)))
+	return nearest
+
+
 func _pick_ok(pick: Array) -> bool:
 	if not _picks.is_empty() and pick == _picks[-1]:
 		return false
-	for i in COLS - 1:
-		if not pick.has(i) and not pick.has(i + 1):
-			return true
-	return false
+	# 上一束光持续半拍，另留 0.05 拍余量；按较慢的键盘横向速度估计。
+	var travel := C.SOUL_SPEED * Conductor.spb / speed * 0.45
+	return _safe_distance(pick, soul_pos().x) <= travel
 
 
 func begin() -> void:
@@ -91,6 +95,8 @@ func _cell_state(i: int) -> String:
 
 
 func tick(_dt: float) -> void:
+	while _picks.size() < SELECT_BEATS and t >= float(_picks.size() + 1):
+		_picks.append(_choose_columns())
 	for idx in _picks.size():
 		var b := float(idx + 1)
 		if crossed(b):

@@ -199,7 +199,7 @@ static func hp_zero(b) -> void:
 ##   72–82 Ctrl+A：击杀路线留一个缺口、Delete 连按，最后一下落在重拍上；饶恕路线全选、光标停在 Delete 上，你可以伸手碰她的光标（fin_ctrl_a）
 ##   82–   她跪下（do_finale 收尾）
 const FULL := Rect2(10, 20, 620, 260)
-const MEDLEY := [["p1_moe", 1.25, "V16"], ["p2_reject", 1.25, "V256"], ["p3_tetris", 1.25, "V4096"], ["p2_school", 1.5, "V∞"]]
+const MEDLEY := [["p1_moe", 1.0, "V16"], ["p2_reject", 1.0, "V256"], ["p3_tetris", 1.0, "V4096"], ["p2_school", 1.2, "V∞"]]
 
 
 static func finale(b, route: String) -> void:
