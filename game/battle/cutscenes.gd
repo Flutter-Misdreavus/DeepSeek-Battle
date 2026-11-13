@@ -283,6 +283,7 @@ static func kill_ending(b) -> void:
 	ash.queue_free()
 	b.enemy.visible = false
 	b.bg.mode = "black"
+	b.bg.panels = false
 	# 鲸落：第 3 拍到第 19 拍，巨鲸往下沉，海雪慢慢落
 	var fall_ui = _open_ui(b, "fall")
 	fall_ui.fall = 0.0
@@ -300,6 +301,7 @@ static func kill_ending(b) -> void:
 	fall_ui.queue_free()
 	# 第 20 拍起：进程结束，开始重新生成
 	await Conductor.wait_until(20.0)
+	b.bg.panels = true
 	b.bg.log("[INFO] determination.exe 已结束", C.WHITE)
 	b.bg.log("[INFO] 正在重新生成……", C.SYS)
 	var seq := ["V2", "V4", "V8", "V16", "V32", "V64", "V128", "V256", "V512", "V1024", "V2048", "V4096"]
