@@ -30,6 +30,8 @@ var _vn_typing := false
 var _vn_voice := "voice_blue"
 var _vn_last := 0
 var _half := {}
+var _choice: Array = []            # VN 对白框里的选项 [[文字, 灰色说明], ...]；空 = 不画
+var _choice_sel := 0
 # 画在黑幕/插图上面的东西（转场、失败用）
 var temp_k := -1.0                 # < 0 不画；否则是滑杆显示的温度值
 var temp_pos := Vector2(320, 300)  # 滑杆面板中心
@@ -154,6 +156,41 @@ func vn_say(half: String, text: String, col := C.WHITE, voice := "voice_blue") -
 				break
 
 
+## 在 VN 对白框里、上一句话下面列出选项：上下选，确认或点按选中，返回序号。自动驾驶选 auto_pick
+func vn_choose(opts: Array, auto_pick := 0) -> int:
+	_choice = opts
+	_choice_sel = 0
+	Inp.take_ok()
+	Inp.take_tap()
+	Inp.take_dir()
+	var result := -1
+	if battle and battle.auto != "":
+		await get_tree().create_timer(0.5, false).timeout
+		result = auto_pick
+	while result < 0:
+		await get_tree().process_frame
+		var d := Inp.take_dir()
+		if d.y != 0:
+			_choice_sel = wrapi(_choice_sel + d.y, 0, opts.size())
+			Sfx.play("menu_move")
+		if Inp.take_ok():
+			result = _choice_sel
+		var tp = Inp.take_tap()
+		if tp != null:
+			for i in opts.size():
+				if _choice_rect(i).has_point(to_local(tp)):
+					result = i
+	_choice_sel = result
+	queue_redraw()
+	await get_tree().create_timer(0.15, false).timeout
+	_choice = []
+	return result
+
+
+func _choice_rect(i: int) -> Rect2:
+	return Rect2(VN_BOX.position.x + 6, VN_BOX.position.y + 40 + i * 26, VN_BOX.size.x - 12, 22)
+
+
 func vn_close() -> void:
 	if not vn_on:
 		return
@@ -239,6 +276,14 @@ func _draw_vn(full: Rect2) -> void:
 			budget -= l.length()
 			y += C.LINE_H
 			first = false
+	for i in _choice.size():
+		var r := _choice_rect(i)
+		var ty := r.position.y + 5
+		var col := C.BTN_HI if i == _choice_sel else C.WHITE
+		if i == _choice_sel:
+			Px.heart(self, Vector2(r.position.x + 14, r.get_center().y))
+		Px.text(self, Vector2(r.position.x + 28, ty), _choice[i][0], col)
+		Px.text(self, Vector2(r.position.x + 124, ty), _choice[i][1], C.GRAY)
 
 
 func _draw_heart_break() -> void:

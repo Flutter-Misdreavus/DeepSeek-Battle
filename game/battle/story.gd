@@ -129,4 +129,5 @@ const ITEMS := [
 const SPARE_NO := "* 你想放过她。\n* 可她还不相信你。"
 const FLEE := "* 你想关掉这个窗口。\n* 关闭按钮是灰的。"
 const GAME_OVER := "已达到对话上限。"
-const NEW_CHAT := "开启新对话"
+const NEW_CHAT := "开启新对话"         # 失败后：从头开始
+const REGEN := "重新生成"              # 失败后：从当前阶段（或终局）继续

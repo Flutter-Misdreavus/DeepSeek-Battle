@@ -151,7 +151,8 @@ static func transition(b, _from: int, to: int) -> void:
 
 
 # ── 失败 ────────────────────────────────────────────────────
-static func game_over(b) -> void:
+## 返回玩家的选择：0 =「开启新对话」从头开始（黑幕不撤，交给 battle.restart()）；1 =「重新生成」从当前阶段继续
+static func game_over(b) -> int:
 	Conductor.stop(0.3)
 	b.soul.active = false
 	var p: Vector2 = b.soul.pos
@@ -162,11 +163,14 @@ static func game_over(b) -> void:
 	await b.wait(0.6)
 	Conductor.play("gameover")
 	await b.overlay.vn_say("bust/B_smile", Story.GAME_OVER, C.RED, "voice_red")
-	await b.overlay.vn_say("bust/B_smile", "[ " + Story.NEW_CHAT + " ]", C.BTN_HI, "text_sys")
+	var here := "从终局继续" if b._checkpoint.get("finale_route", "") != "" else "从第%s阶段继续" % ["一", "二", "三"][b.phase - 1]
+	var k: int = await b.overlay.vn_choose([[Story.NEW_CHAT, "从头开始"], [Story.REGEN, here]], 1)
 	await b.overlay.vn_close()
 	Sfx.play("menu_select")
 	await Conductor.stop(0.5)
-	await b.overlay.tween("fade", 0.0, 0.5)
+	if k == 1:
+		await b.overlay.tween("fade", 0.0, 0.5)
+	return k
 
 
 # ── 击杀路线：她的 HP 归零 ─────────────────────────────────

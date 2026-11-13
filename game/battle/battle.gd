@@ -111,7 +111,9 @@ func _main() -> void:
 		if ended:
 			return
 		if _abort == "gameover":
-			await Cutscenes.game_over(self)
+			if await Cutscenes.game_over(self) == 0:
+				restart()
+				return
 			_abort = ""
 			_restore()
 			var fr: String = _checkpoint.get("finale_route", "")
@@ -715,7 +717,9 @@ func _jump(j: String) -> void:
 			await Cutscenes.spare_ending(self)
 		"gameover":
 			await enter_phase(1, true)
-			await Cutscenes.game_over(self)
+			if await Cutscenes.game_over(self) == 0:
+				restart()
+				return
 			_restore()
 		_:
 			await enter_phase(1, true)
@@ -790,6 +794,15 @@ func pause_input() -> void:
 
 
 func return_to_title() -> void:
+	_leave("res://title/title.tscn")
+
+
+## 失败后选「开启新对话」：整场从头再来（重新载入战斗，开场照常播放，物品和血量全部重置）
+func restart() -> void:
+	_leave("res://battle/battle.tscn")
+
+
+func _leave(scene: String) -> void:
 	if _returning_to_title:
 		return
 	_returning_to_title = true
@@ -797,7 +810,7 @@ func return_to_title() -> void:
 	Inp.clear_confirm()
 	Inp.pause_rect = Rect2()
 	set_paused(false)
-	get_tree().change_scene_to_file.call_deferred("res://title/title.tscn")
+	get_tree().change_scene_to_file.call_deferred(scene)
 
 
 func _pause_rect(i: int) -> Rect2:
