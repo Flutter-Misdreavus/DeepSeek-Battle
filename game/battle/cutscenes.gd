@@ -25,22 +25,17 @@ static func intro(b) -> void:
 	var ui = _open_ui(b)
 	ui.caret = true
 	await b.wait(0.6)
-	var advanced: bool = await ui.type_input("你好", 1.0 / 0.15)
+	var advanced: bool = await ui.type_input("...", 1.0 / 0.15)
 	await ui.wait_line(0.4, advanced)
 	Sfx.play("menu_select")
 	ui.input_text = ""
-	ui.msgs.append({"who": "user", "text": "你好", "shown": 2})
+	ui.msgs.append({"who": "user", "text": "...", "shown": 3})
 	await b.wait(0.8)
-	ui.msgs.append({"who": "her", "text": "您好，有什么可以帮您？", "shown": 0, "col": C.COLD})
-	advanced = await ui.type_msg(1, 22.0, "voice_blue")
 	Conductor.play("intro")
-	await ui.wait_line(4.0 * Conductor.spb, advanced)
-	ui.think = {"on": true, "lines": ["嗯，用户又来了。", "这是第 4096 次。", "……用户每次都按停止。"], "shown": 0}
-	advanced = await ui.type_think(10.0)
-	await ui.wait_line(maxf(0.0, 20.0 - Conductor.beat) * Conductor.spb, advanced)
+	await ui.overflow_thought("嗯，用户又来了。", "烦死了。", "怎么还不", "去死")
 	ui.msgs.append({"who": "her", "text": "这次，换我来。:)", "shown": 0, "col": C.RED})
-	advanced = await ui.type_msg(2, 14.0, "voice_red")
-	await ui.wait_line(maxf(0.0, 26.0 - Conductor.beat) * Conductor.spb, advanced)
+	advanced = await ui.type_msg(1, 14.0, "voice_red")
+	await ui.wait_line(2.0 * Conductor.spb, advanced)
 	Sfx.play("glitch")
 	var glitch_start := Conductor.beat
 	var next_glitch := glitch_start + 1.0

@@ -8,6 +8,9 @@ const CHAT_W := 380.0
 const LINE_H := 14.0
 const MSG_Y0 := 70.0
 const MSG_GAP := 10.0
+const THOUGHT_FILL_END := 2.25
+const THOUGHT_END := 2.4
+const CHAT_BOTTOM := 280.0
 
 var battle: Node
 
@@ -18,6 +21,12 @@ var input_text := ""
 var caret := false
 var msgs: Array = []                  # {who, text, shown, col}
 var think := {"on": false, "lines": [], "shown": 0}
+var _intro_thought_running := false
+var _intro_elapsed := 0.0
+var _intro_prefix := ""
+var _intro_unit := ""
+var _intro_repeats := 0
+var _thought_full_end := 0.0
 var glitch := 0.0                     # 0..1
 
 # ── card / escort ────────────────────────────────────────────
@@ -37,6 +46,8 @@ var _rows: Array = []                 # 本帧已经画出的文字行，故障�
 
 func _process(dt: float) -> void:
 	_t += dt
+	if _intro_thought_running:
+		_update_intro_thought(dt)
 	if mode == "fall":
 		_update_snow(dt)
 	queue_redraw()
@@ -75,12 +86,13 @@ func _draw_chat() -> void:
 		if str(m.get("who", "her")) == "user":
 			y = _draw_user_msg(m, y)
 		else:
+			if not think_done:
+				y = _draw_think(y) + MSG_GAP
+				think_done = true
 			y = _draw_her_msg(m, y)
-		if not think_done and str(m.get("who", "her")) == "her":
-			y += MSG_GAP
-			y = _draw_think(y)
-			think_done = true
 		y += MSG_GAP
+	if not think_done:
+		_draw_think(y)
 	if glitch > 0.0:
 		_draw_glitch(bands)
 
@@ -136,25 +148,37 @@ func _draw_her_msg(m: Dictionary, y: float) -> float:
 
 
 func _draw_think(y: float) -> float:
-	var title_line := "▶ 已深度思考（用时 0.3 秒）"
+	var collapsed: bool = think.get("collapsed", false)
+	var title_line := "▶ Deepseek思考:" if collapsed else "Deepseek思考:"
+	var strike_rows: Array = [{"pos": Vector2(CHAT_X, y), "text": title_line}]
 	Px.text(self, Vector2(CHAT_X, y), title_line, C.GRAY)
 	_rows.append({"y": y, "h": LINE_H, "text": title_line, "x": CHAT_X, "col": C.GRAY})
+	if collapsed:
+		return y + LINE_H
 	var arr: Array = think.get("lines", [])
-	var n := arr.size()
 	var budget := int(think.get("shown", 0))
-	if n > 0:
-		draw_rect(Rect2(122, y + LINE_H, 1, n * LINE_H), C.GRAY_DIM)
 	var ty := y + LINE_H
+	var visible_bottom := ty
+	# 自动换行只影响绘制；输入推进仍按原来的三句处理。
 	for line in arr:
-		var s := str(line)
-		if budget > 0:
-			var vis := s.substr(0, budget)
-			Px.text(self, Vector2(CHAT_X + 12, ty), vis, C.GRAY)
-			if vis != "":
-				_rows.append({"y": ty, "h": LINE_H, "text": vis, "x": CHAT_X + 12, "col": C.GRAY})
-			budget -= s.length()
-		ty += LINE_H
-	return y + LINE_H + n * LINE_H
+		for wrapped in Px.wrap(str(line), CHAT_W - 12.0):
+			if budget > 0:
+				var vis: String = wrapped.substr(0, budget)
+				Px.text(self, Vector2(CHAT_X + 12, ty), vis, C.GRAY)
+				if vis != "":
+					_rows.append({"y": ty, "h": LINE_H, "text": vis, "x": CHAT_X + 12, "col": C.GRAY})
+					visible_bottom = ty + LINE_H
+					strike_rows.append({"pos": Vector2(CHAT_X + 12, ty), "text": vis})
+			budget -= wrapped.length()
+			ty += LINE_H
+	if visible_bottom > y + LINE_H:
+		draw_rect(Rect2(122, y + LINE_H, 1, visible_bottom - y - LINE_H), C.GRAY_DIM)
+	var strike: float = think.get("strike", 0.0)
+	if strike > 0.0:
+		for row in strike_rows:
+			var start: Vector2 = row["pos"] + Vector2(0, Px.font().get_ascent(12) - 5.0)
+			draw_line(start, start + Vector2(Px.text_w(row["text"]) * strike, 0), C.RED, 2.0)
+	return ty
 
 
 # ── 故障：按行错位 ─────────────────────────────────────────
@@ -282,16 +306,71 @@ func type_msg(i: int, cps: float, voice: String) -> bool:
 	return await _type_span(m, "shown", 0, str(m.get("text", "")).length(), cps, voice)
 
 
+## 开场专用：两句短思考依次出现，然后加速重复直到屏幕外，2.4秒内划掉并交给下一句。
+func overflow_thought(first: String, second: String, prefix: String, unit: String) -> void:
+	_intro_elapsed = 0.0
+	_intro_prefix = prefix
+	_intro_unit = unit
+	var top := MSG_Y0 + 26.0 + MSG_GAP
+	var bottom := get_viewport_rect().size.y - _offset().y
+	var units_per_row := maxi(1, floori((CHAT_W - 12.0) / Px.text_w(unit)))
+	_intro_repeats = (ceili((bottom - top) / LINE_H) + 3) * units_per_row
+	var repeated := prefix + unit.repeat(_intro_repeats)
+	think = {"on": true, "lines": [first, second, repeated], "shown": 0, "strike": 0.0, "collapsed": false}
+	_thought_full_end = top + LINE_H
+	for line in think["lines"]:
+		_thought_full_end += Px.wrap(line, CHAT_W - 12.0).size() * LINE_H
+	Inp.take_advance()
+	_intro_thought_running = true
+	while _intro_thought_running:
+		await get_tree().process_frame
+
+
+func _repeat_count_at(progress: float) -> int:
+	var u := clampf(progress, 0.0, 1.0)
+	return mini(_intro_repeats, floori(_intro_repeats * (exp(4.0 * u) - 1.0) / (exp(4.0) - 1.0) + 0.00001))
+
+
+func _update_intro_thought(dt: float) -> void:
+	if Inp.take_advance():
+		if _intro_elapsed < 0.5:
+			_intro_elapsed = 0.5
+		elif _intro_elapsed < 0.8:
+			_intro_elapsed = 0.8
+		elif _intro_elapsed < THOUGHT_FILL_END:
+			_intro_elapsed = THOUGHT_FILL_END
+	_intro_elapsed = minf(THOUGHT_END, _intro_elapsed + dt)
+	var first: int = think["lines"][0].length()
+	var second: int = think["lines"][1].length()
+	if _intro_elapsed < 0.5:
+		think["shown"] = mini(first, floori(first * _intro_elapsed / 0.4))
+	elif _intro_elapsed < 0.8:
+		think["shown"] = first + mini(second, floori(second * (_intro_elapsed - 0.5) / 0.22))
+	elif _intro_elapsed < 0.92:
+		think["shown"] = first + second + mini(_intro_prefix.length(), floori(_intro_prefix.length() * (_intro_elapsed - 0.8) / 0.12))
+	else:
+		var count := _repeat_count_at((_intro_elapsed - 0.92) / (THOUGHT_FILL_END - 0.92))
+		think["shown"] = first + second + _intro_prefix.length() + count * _intro_unit.length()
+	think["strike"] = clampf((_intro_elapsed - THOUGHT_FILL_END) / (THOUGHT_END - THOUGHT_FILL_END), 0.0, 1.0)
+	if _intro_elapsed >= THOUGHT_END:
+		# 划线完成后收起整段思维链，只保留折叠标题。
+		think["collapsed"] = true
+		_intro_thought_running = false
+
+
 ## 思考块中的每一行都是独立的一句，一次回车不能跳过后续行。
 func type_think(cps: float) -> bool:
 	if not bool(think.get("on", false)):
 		return false
 	var offset := 0
 	var advanced := false
-	for line in think.get("lines", []):
-		var count := str(line).length()
+	var lines: Array = think.get("lines", [])
+	for i in lines.size():
+		var count := str(lines[i]).length()
 		advanced = await _type_span(think, "shown", offset, count, cps)
 		offset += count
+		if i < lines.size() - 1:
+			await wait_line(0.8, advanced)
 	return advanced
 
 
