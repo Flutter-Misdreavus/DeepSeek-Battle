@@ -1,0 +1,6 @@
+# Optional asset preparation tools; Godot itself needs no Python packages.
+numpy
+Pillow
+soundfile
+librosa
+matplotlib

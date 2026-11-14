@@ -17,6 +17,30 @@ ref/
 
 # Documents (not published)
 *.md
+!/README.md
+
+# Local credentials and signing material
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.keystore.*
+*.mobileprovision
+export_credentials.cfg
+credentials.json
+service-account*.json
+.aws/
+.ssh/
+
+# Local environments and runtime logs
+.venv/
+venv/
+*.log
 
 # Third-party audio and lyrics (no redistribution license)
 assets/audio/
