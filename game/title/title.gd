@@ -3,6 +3,11 @@ extends Node2D
 ## 逻辑坐标 640×360；根节点像 battle 一样在视口里居中。
 
 const BG := preload("res://battle/bg.gd")
+const FRONT := preload("res://art/bust/B.png")
+const GLANCE := preload("res://art/bust/B_glance.png")
+const CREDIT_TEXT := "B站 水请洗干净"
+const CREDIT_URL := "https://space.bilibili.com/161949528"
+const CREDIT_NOTE := "  同人作品 · 非商用"
 
 const MENU_X := 330.0
 const MENU_Y := 214.0
@@ -12,6 +17,7 @@ const ITEM_RECT := Vector2(180, 18)
 var bg := BG.new()
 var bust := Sprite2D.new()
 var shade := Node2D.new()
+var credit_link: LinkButton
 
 var sel := 0
 var fade := 0.0
@@ -33,7 +39,7 @@ func _ready() -> void:
 	bg.panels = false
 	bg.z_index = -2
 	add_child(bg)
-	var tex: Texture2D = load("res://art/bust/B_glance.png")
+	var tex: Texture2D = FRONT
 	bust.texture = tex
 	bust.centered = false
 	bust.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
@@ -42,6 +48,19 @@ func _ready() -> void:
 	var s := 300.0 / float(tex.get_height())
 	bust.scale = Vector2(s, s)
 	add_child(bust)
+	credit_link = LinkButton.new()
+	credit_link.text = CREDIT_TEXT
+	credit_link.position = Vector2(630.0 - Px.text_w(CREDIT_NOTE) - Px.text_w(CREDIT_TEXT), 338)
+	credit_link.add_theme_font_override("font", Px.font())
+	credit_link.add_theme_font_size_override("font_size", 12)
+	credit_link.add_theme_color_override("font_color", C.GRAY_DIM)
+	credit_link.add_theme_color_override("font_hover_color", C.SYS)
+	credit_link.add_theme_color_override("font_pressed_color", C.SYS)
+	credit_link.underline = LinkButton.UNDERLINE_MODE_ON_HOVER
+	credit_link.focus_mode = Control.FOCUS_NONE
+	credit_link.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	credit_link.pressed.connect(_open_credit)
+	add_child(credit_link)
 	shade.z_index = 100
 	shade.draw.connect(_draw_shade)
 	add_child(shade)
@@ -79,6 +98,10 @@ func _item_rect(i: int) -> Rect2:
 	return Rect2(Vector2(MENU_X, MENU_Y + i * MENU_DY) - Vector2(16, 3), ITEM_RECT)
 
 
+func _open_credit() -> void:
+	OS.shell_open(CREDIT_URL)
+
+
 func _item_pos(i: int) -> Vector2:
 	return Vector2(MENU_X, MENU_Y + i * MENU_DY)
 
@@ -92,6 +115,8 @@ func _choose(i: int) -> void:
 		get_tree().quit()
 		return
 	starting = true
+	bust.texture = GLANCE
+	credit_link.disabled = true
 	Sfx.play("menu_select")
 	Conductor.stop(0.6)
 	Conductor.set_lowpass(false)
@@ -121,5 +146,4 @@ func _draw() -> void:
 			Px.heart(self, p + Vector2(-12, 6))
 	var hint := "Z / Enter 确定   方向键 移动   手机：点按 / 拖动"
 	Px.text(self, Vector2(630.0 - Px.text_w(hint), 318), hint, C.GRAY_DIM)
-	var foot := "字体 Fusion Pixel（OFL）  同人作品 · 非商用"
-	Px.text(self, Vector2(630.0 - Px.text_w(foot), 338), foot, C.GRAY_DIM)
+	Px.text(self, Vector2(630.0 - Px.text_w(CREDIT_NOTE), 338), CREDIT_NOTE, C.GRAY_DIM)
