@@ -4,7 +4,7 @@
 
 **传说之下 · Deepseek Boss 战**
 
-![标题界面](docs/images/title.png)
+![DeepSeek Battle 封面](docs/images/cover_16x9.png)
 
 </div>
 
