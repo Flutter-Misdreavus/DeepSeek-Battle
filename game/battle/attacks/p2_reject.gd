@@ -3,7 +3,7 @@ extends Attack
 ##
 ## 绿心：她发起「提示词注入」，鲸鱼从四面八方游向你的心，你举着「拒绝」盾一条条挡回去。
 ## 参考传说之下 Undyne 的绿心。
-## - 20 条鲸鱼按原节奏到达，初始来向随机；前 12 条为白鲸，后 8 条随机混合 4 白 4 红。
+## - 20 条鲸鱼前12条保持原节奏，后8条采用前12条的平均间隔（约0.82拍），初始来向随机；前 12 条为白鲸，后 8 条随机混合 4 白 4 红。
 ## - 到达那一帧看盾的方向：对准了就挡住（这条消失、出气泡），没对准就继续往里飞并开始伤人。
 ## - 白鲸直线迎面格挡；红鲸最后 0.75 拍绕到对侧，朝初始来向的反方向格挡。
 ## - 鲸鱼画在框外也看得见，所以全部画在 draw_outside；框只有 64×64。
@@ -16,10 +16,13 @@ const EXIST := 2.4                       # 还剩几拍时出现
 const HINT_BEATS := 3.0
 
 const TURN_BEATS := 0.75
+const LATE_INTERVAL := (10.0 - 1.0) / 11.0 # 与前12条的平均到达间隔一致
 const ARRIVALS := [
 	1.0, 2.0, 3.0, 4.0, 5.0, 5.5, 6.0, 6.5,
-	7.5, 8.5, 9.5, 10.0, 11.0, 12.0, 12.5, 13.5,
-	14.5, 15.0, 15.5, 16.0,
+	7.5, 8.5, 9.5, 10.0,
+	11.0, 11.0 + LATE_INTERVAL, 11.0 + 2.0 * LATE_INTERVAL, 11.0 + 3.0 * LATE_INTERVAL,
+	11.0 + 4.0 * LATE_INTERVAL, 11.0 + 5.0 * LATE_INTERVAL,
+	11.0 + 6.0 * LATE_INTERVAL, 11.0 + 7.0 * LATE_INTERVAL,
 ]
 
 const DIR_VEC := {
@@ -39,7 +42,7 @@ var _first_tick := true
 
 
 func setup() -> void:
-	duration = 17.0
+	duration = ARRIVALS[-1] + 1.0
 	box_size = Vector2(64, 64)
 	soul_mode = "green"
 	no_stop = true

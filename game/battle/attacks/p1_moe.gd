@@ -1,7 +1,7 @@
 extends Attack
 ## P1-2「MoE 路由」
 ##
-## DeepSeek 是混合专家模型：框上方 8 个专家格子，每一拍只激活其中几列，被选中的列向下射光束。
+## DeepSeek 是混合专家模型：框上方 8 个专家格子，每轮只激活其中几列，被选中的列向下射光束。
 ## - 每次预警有50%概率激活玩家当时所在列，否则不选该列；之后不追踪换列。
 ## - 选列时保证至少有两列相邻的列没被选中，所以框里始终有一条 48px 宽的安全区。
 ## - b ≤ 6 激活 2 列；7–9 激活 3 列；10–12 激活 4 列。每次预警时按玩家位置随机选择并缓存。
@@ -12,6 +12,8 @@ const COLS := 8
 const SELECT_BEATS := 12
 const FIRE_LEN := 0.6
 const SHRINK_LEN := 0.1
+const REST_BEATS := 0.5
+const OUTRO_BEATS := 0.9
 const CELL_SIZE := Vector2(20, 13)
 const CORE_W := 10.0
 
@@ -21,7 +23,7 @@ var _warning_beats := 1.0
 
 
 func setup() -> void:
-	duration = 14.5
+	duration = 26.6
 	box_size = Vector2(192, 116)
 	stop_beat = 7.0
 	_picks.clear()
@@ -29,7 +31,7 @@ func setup() -> void:
 	_warning_beats = 1.0
 
 
-## 每次预警时才抽列：保留相邻两列，且在上一束光消退后仍来得及移入。
+## 每次预警时才抽列：保留相邻两列，且预警时间内可到达。
 func _choose_columns() -> Array:
 	var b := _picks.size() + 1
 	var count := 2 if b <= 6 else (3 if b <= 9 else 4)
@@ -70,17 +72,17 @@ func _column_width() -> float:
 func _pick_ok(pick: Array) -> bool:
 	if not _picks.is_empty() and pick == _picks[-1]:
 		return false
-	# 上一束光持续半拍，另留 0.05 拍余量；按较慢的键盘横向速度估计。
-	var travel := C.SOUL_SPEED * Conductor.spb / speed * (_warning_beats - 0.55)
+	# 上一轮已结束，使用本轮完整预警时间，另留 0.05 拍余量。
+	var travel := C.SOUL_SPEED * Conductor.spb / speed * (_warning_beats - 0.05)
 	return _safe_distance(pick, soul_pos().x) <= travel
 
 
 func begin() -> void:
-	# 宽屏混剪也将整个框分成八列。较宽的列需要更长预警，避免锁列变成必中。
+	# 宽场地仍将整个框分成八列；较宽的列需要更长预警。
 	# 靠近第二列边界时，一侧只有单列，需预留横穿一列到双列安全区的时间。
 	var escape := _column_width() + C.HITBOX.x / 2.0 + 1.0
-	_warning_beats = maxf(1.0, ceilf(escape / (C.SOUL_SPEED * Conductor.spb / speed) + 0.55))
-	duration = SELECT_BEATS + _warning_beats + 1.5
+	_warning_beats = maxf(1.0, ceilf(escape / (C.SOUL_SPEED * Conductor.spb / speed) + 0.05))
+	duration = _warning_start(SELECT_BEATS - 1) + _warning_beats + FIRE_LEN + OUTRO_BEATS
 	pose("snow")
 
 
@@ -90,19 +92,24 @@ func _col_x(i: int) -> float:
 	return box.position.x + _column_width() * c
 
 
-## 当前（最近一次）选择的序号；第一次选择之前是 -1
+## 唯一的轮次时间表：预警 → 发射 → 完全空档，之后才开始下一轮。
+func _warning_start(index: int) -> float:
+	return 1.0 + index * (_warning_beats + FIRE_LEN + REST_BEATS)
+
+
+## 空档和收招期间没有激活的专家。
 func _cur_pick() -> int:
-	var cur := -1
 	for idx in _picks.size():
-		if t >= float(idx + 1):
-			cur = idx
-	return cur
+		var start := _warning_start(idx)
+		if t >= start and t < start + _warning_beats + FIRE_LEN:
+			return idx
+	return -1
 
 
 ## 专家格子的状态：idle / pick（被选中）/ fire（发射中）
 func _cell_state(i: int) -> String:
 	for idx in _picks.size():
-		var b := float(idx + 1)
+		var b := _warning_start(idx)
 		if _picks[idx].has(i):
 			if t >= b + _warning_beats and t < b + _warning_beats + FIRE_LEN:
 				return "fire"
@@ -112,10 +119,10 @@ func _cell_state(i: int) -> String:
 
 
 func tick(_dt: float) -> void:
-	while _picks.size() < SELECT_BEATS and t >= float(_picks.size() + 1):
+	while _picks.size() < SELECT_BEATS and t >= _warning_start(_picks.size()):
 		_picks.append(_choose_columns())
 	for idx in _picks.size():
-		var b := float(idx + 1)
+		var b := _warning_start(idx)
 		if crossed(b):
 			sfx("warn")
 		if crossed(b + _warning_beats):
@@ -124,21 +131,21 @@ func tick(_dt: float) -> void:
 		if t >= b + _warning_beats and t < b + _warning_beats + 0.5:
 			for i in _picks[idx]:
 				hz_rect(Rect2(_col_x(int(i)), box.position.y, _column_width(), box.size.y))
-	if t >= SELECT_BEATS + _warning_beats and not _posed_a:
+	if t >= _warning_start(SELECT_BEATS - 1) + _warning_beats + FIRE_LEN and not _posed_a:
 		_posed_a = true
 		pose("A")
 
 
 func _draw() -> void:
-	# 先画预警，再画光束：上一拍的光束盖住这一拍刚出现的蚂蚁线
+	# 预警与光束串行，轮间空档不会绘制任何预警或激光。
 	for idx in _picks.size():
-		var b := float(idx + 1)
+		var b := _warning_start(idx)
 		if t >= b and t < b + _warning_beats:
 			for i in _picks[idx]:
 				var x := _col_x(int(i))
 				Px.dashed(self, Rect2(x + 2.0, box.position.y + 1.0, _column_width() - 4.0, box.size.y - 2.0), Color(C.SYS, 0.8), t * 16.0)
 	for idx in _picks.size():
-		var b := float(idx + 1)
+		var b := _warning_start(idx)
 		if t >= b + _warning_beats and t < b + _warning_beats + FIRE_LEN:
 			for i in _picks[idx]:
 				_draw_beam(int(i), b)

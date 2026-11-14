@@ -1,7 +1,7 @@
 extends SceneTree
 ## godot --headless --path game --log-file /tmp/reject-patterns.log --script res://tests/reject_patterns.gd
 
-const ARRIVALS := [1.0, 2.0, 3.0, 4.0, 5.0, 5.5, 6.0, 6.5, 7.5, 8.5, 9.5, 10.0, 11.0, 12.0, 12.5, 13.5, 14.5, 15.0, 15.5, 16.0]
+const EARLY_ARRIVALS := [1.0, 2.0, 3.0, 4.0, 5.0, 5.5, 6.0, 6.5, 7.5, 8.5, 9.5, 10.0]
 var failed := false
 var checks := 0
 var battle: Node
@@ -35,7 +35,12 @@ func geometry_and_randomness() -> void:
 		var repeat = make_attack(seed_value)
 		var mirrored = make_attack(seed_value, true)
 		check(a._whales == repeat._whales and a._whales == mirrored._whales, "相同种子必须复现，镜像不能改变随机抽样")
-		check(a.ARRIVALS == ARRIVALS and a.duration == 17.0 and a.V == 60.0, "保留原数量、节奏、速度和总时长")
+		check(a.ARRIVALS.size() == 20 and a.ARRIVALS.slice(0, 12) == EARLY_ARRIVALS and a.V == 60.0, "保留20条、前12条原节奏和鲸鱼速度")
+		check(is_equal_approx(a._arrive(12), 11.0) and is_equal_approx(a.duration - a._arrive(19), 1.0), "后段首条保持11拍，末条之后保留完整收尾时间")
+		check(a._arrive(19) + a.R_HIT / a.V < a.duration, "最后一条鲸鱼必须能完整经过判定区")
+		var average_interval: float = (a._arrive(11) - a._arrive(0)) / 11.0
+		for i in range(13, 20):
+			check(is_equal_approx(a._arrive(i) - a._arrive(i - 1), average_interval), "后8条的密度必须与前12条的平均密度一致")
 		layouts[str(a._whales)] = true
 		var reds := 0
 		var snapshot: Array = a._whales.duplicate(true)
@@ -50,7 +55,7 @@ func geometry_and_randomness() -> void:
 				if i >= 14:
 					check(not (a._kind(i) == a._kind(i - 1) and a._kind(i) == a._kind(i - 2)), "后八条不能连续三条同色")
 			if red:
-				check(a._arrive(i) - a.EXIST >= 8.5, "前半段不能提前出现红鲸")
+				check(a._arrive(i) - a.EXIST >= 8.5, "红鲸不能提前进入前12条白鲸的教学段")
 			var initial: Vector2 = a.DIR_VEC[a._side(i)]
 			var guard: Vector2 = a._guard_dir(i)
 			check(guard == (-initial if red else initial), "红鲸反向格挡，白鲸迎面格挡")

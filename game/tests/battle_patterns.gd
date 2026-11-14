@@ -4,6 +4,7 @@ extends SceneTree
 var _failed := false
 var _checks := 0
 var _battle: Node
+var _moe_done := false
 
 
 func _initialize() -> void:
@@ -262,6 +263,98 @@ func _targeted_moe() -> void:
 	conductor.spb = spb
 
 
+func _moe_rest() -> void:
+	for seed_value in 8:
+		for width in [192.0, 620.0]:
+			for mirrored in [false, true]:
+				for requested_speed in [1.0, 1.25]:
+					var a = _attack("p1_moe", seed_value)
+					a.box = Rect2(10, 20, width, 260)
+					a.mirror = mirrored
+					a.speed = requested_speed
+					a.begin()
+					_check(a.stop_beat == 7.0, "MoE停止按钮仍应在第7拍出现")
+					if width == 192.0:
+						_check(is_equal_approx(a.duration, 26.6), "正常MoE完整12轮应为26.6拍")
+					for i in 12:
+						_battle.soul.pos = _positions(a.box)[i % 5]
+						var start: float = a._warning_start(i)
+						a.prev_t = a.t
+						a.t = start
+						a.clear_hazards()
+						a.tick(0.0)
+						_check(a._picks.size() == i + 1, "每轮只能在预警开始时生成选列")
+						var pick: Array = a._picks[i].duplicate()
+						_check(a.hazards_r.is_empty() and a._cur_pick() == i, "预警阶段没有伤害且仅本轮激活")
+						for col in 8:
+							_check(a._cell_state(col) == ("pick" if pick.has(col) else "idle"), "预警显示必须与缓存选列一致")
+						_battle.soul.pos = a.box.end - C.SOUL_HALF
+						for offset in [0.1, 0.55]:
+							a.prev_t = a.t
+							a.t = start + a._warning_beats + offset
+							a.clear_hazards()
+							a.tick(0.0)
+							_check(a._picks[i] == pick, "预警后不能随玩家换列")
+							_check(a.hazards_r.size() == (pick.size() if offset < 0.5 else 0), "激光仍只在前0.5拍造成伤害")
+							for col in 8:
+								_check(a._cell_state(col) == ("fire" if pick.has(col) else "idle"), "激光显示必须与判定选列一致")
+						var end: float = start + a._warning_beats + a.FIRE_LEN
+						if i < 11:
+							_check(is_equal_approx(a._warning_start(i + 1) - end, 0.5), "两轮之间必须留足0.5拍完全空档")
+						var rng_state: int = a.rng.state
+						for offset in [0.001, 0.25, 0.499]:
+							a.prev_t = a.t
+							a.t = end + offset
+							a.clear_hazards()
+							a.tick(0.0)
+							_check(a.hazards_r.is_empty() and a.hazards_c.is_empty(), "喘息空档内不能有激光伤害")
+							_check(a._cur_pick() == -1 and a._picks.size() == i + 1 and a.rng.state == rng_state, "空档不能提前激活或随机生成下一轮")
+							for col in 8:
+								_check(a._cell_state(col) == "idle", "喘息空档内所有专家必须待机，无预警无激光")
+					a.prev_t = a.t
+					a.t = a.duration
+					a.clear_hazards()
+					a.tick(0.0)
+					_check(a._posed_a and a.hazards_r.is_empty(), "最后一束结束后应正常收招")
+					a.free()
+
+
+func _play_moe() -> void:
+	_moe_done = false
+	await _battle.run_attack("p1_moe", 1.0, false, {"no_stop": true})
+	_moe_done = true
+
+
+func _moe_live() -> void:
+	var settings = root.get_node("Settings")
+	var saved: bool = settings.invincible
+	settings.invincible = true
+	root.get_node("Conductor").play("p1")
+	_play_moe()
+	var paused := false
+	var rounds := 0
+	for frame in 3000:
+		await process_frame
+		if _moe_done:
+			break
+		var a = _battle.cur_attack
+		if a == null:
+			continue
+		rounds = maxi(rounds, a._picks.size())
+		if a.t > 2.7 and a.t < 3.0 and not paused:
+			var old_t: float = a.t
+			var cache: Array = a._picks.duplicate(true)
+			_battle.set_paused(true)
+			await _frames(10)
+			_check(a.t == old_t and a._picks == cache and a._cur_pick() == -1, "喘息空档暂停时必须冻结轮次，不得生成下一轮")
+			_battle.set_paused(false)
+			await process_frame
+			_check(a.t - old_t < 0.1, "恢复时不能补算暂停时间而跳过喘息空档")
+			paused = true
+	_check(_moe_done and paused and rounds == 12, "真实战斗时钟下MoE必须包含12轮和可暂停的空档")
+	settings.invincible = saved
+
+
 func _snow_and_waves() -> void:
 	var rain = _attack("fin_bsod", 19)
 	_battle.soul.pos = rain.box.get_center()
@@ -484,6 +577,8 @@ func _run() -> void:
 	_cache_and_seed()
 	_tetris()
 	_targeted_moe()
+	_moe_rest()
+	await _moe_live()
 	_snow_and_waves()
 	_flock()
 	_flock_edges()
