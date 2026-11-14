@@ -189,18 +189,17 @@ static func hp_zero(b) -> void:
 ## 配乐 final 段按拍号编排（拍号都是这一段从 0 开始数）：
 ##   0–8   她闭眼蓄力 → 睁眼；标题栏裂开、整个窗口碎掉；她变成巨大的 segG_storm 垫在背后，弹幕框撑满屏幕
 ##   8–24  蓝屏：整个屏幕变成死机蓝屏，「:(」翻成她的「:)」，二维码的像素炸成弹幕（fin_bsod）
-##   24–56 版本号：V16 → V256 → V4096 → V∞，前面三个阶段的招牌攻击各截 8 拍（红心 → 绿心 → 蓝心 → 红心），实际速度与各自原阶段一致
+##   24–56 无限上下文：碎框 → 鲸雨 → 鲸环 → 四臂漩涡 → 合框，完整演出拉长至32拍
 ##   56–72 巨鲸：一条占满屏幕的大鲸鱼游过，身边甩出螺旋的小鲸鱼（fin_giant）
 ##   72–88 鲸吞：巨鲸冲向镜头把弹幕框一口吞下；在它肚子里躲「ERROR」磷虾，肚子一拍一拍地收缩，最后把你吐出来（fin_swallow）
 ##   88–   鲸吞结束后直接收尾，她跪下（do_finale）；已删除Ctrl+A / Delete段落。
 const FULL := Rect2(10, 20, 620, 260)
-const MEDLEY_BEATS := 8.0
-const MEDLEY_START := 24.0
-const GIANT_START := MEDLEY_START + MEDLEY_BEATS * 4.0
+const INFINITE_START := 24.0
+const INFINITE_BEATS := 32.0
+const INFINITE_SPEED := 20.0 / INFINITE_BEATS
+const GIANT_START := INFINITE_START + INFINITE_BEATS
 const SWALLOW_START := GIANT_START + 16.0
 const FINALE_END := SWALLOW_START + 16.0
-# 第四项为原阶段音乐；无额外加速，并补偿终局与原阶段的BPM差异。
-const MEDLEY := [["p1_moe", 1.0, "V16", "p1"], ["p2_reject", 1.0, "V256", "p2"], ["p3_tetris", 1.0, "V4096", "p3"], ["p2_school", 1.0, "V∞", "p2"]]
 
 
 static func finale(b, route: String) -> void:
@@ -233,18 +232,10 @@ static func finale(b, route: String) -> void:
 	await b.run_attack("fin_bsod", 1.0, false, {"rect": FULL, "start_beat": 8.0, "max_beats": 16.0, "keep_box": true, "no_stop": true, "damage": 5, "route": route})
 	if b._abort != "":
 		return
-	# 24–56 版本号
-	for i in MEDLEY.size():
-		var m: Array = MEDLEY[i]
-		b.big_version = m[2]
-		Sfx.play("version_tick")
-		b.enemy.set_param("glitch", 0.7)
-		b.enemy.tween_param("glitch", 0.0, 0.4)
-		var native_speed: float = m[1] * Conductor.spb / Conductor.section_spb(m[3])
-		await b.run_attack(m[0], native_speed, i % 2 == 1, {"start_beat": MEDLEY_START + MEDLEY_BEATS * i, "max_beats": MEDLEY_BEATS, "keep_box": true, "keep_soul": true, "no_stop": true, "damage": 5})
-		if b._abort != "":
-			return
-	b.big_version = ""
+	# 24–56 无限上下文：不插入菜单或额外缩框，合框回到FULL继续下一段。
+	await b.run_attack("fin_infinite", INFINITE_SPEED, false, {"rect": FULL, "merge_rect": FULL, "start_beat": INFINITE_START, "max_beats": INFINITE_BEATS, "keep_box": true, "keep_soul": true, "no_stop": true, "damage": 5, "route": route})
+	if b._abort != "":
+		return
 	# 56–72 巨鲸
 	await b.run_attack("fin_giant", 1.0, false, {"rect": FULL, "start_beat": GIANT_START, "max_beats": 16.0, "keep_box": true, "keep_soul": true, "no_stop": true, "damage": 5, "route": route})
 	if b._abort != "":

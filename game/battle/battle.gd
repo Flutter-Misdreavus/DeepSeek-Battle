@@ -178,6 +178,7 @@ func reset_stage() -> void:
 	enemy.aura = 0.0
 	bg.panels = true
 	box.fill = C.BLACK
+	box.border_col = C.WHITE
 	big_version = ""
 
 
@@ -469,7 +470,7 @@ func _enemy_turn() -> void:
 ## 跑一个攻击（终局也用它串起几段）。opts：
 ##   damage      伤害（默认本阶段的值）
 ##   box / rect  覆盖弹幕框大小 / 直接给内框矩形
-##   start_beat  等到配乐第几拍才开始（默认下一个整拍）
+##   start_beat  以配乐绝对拍号开始，并以该拍号作为时间原点（默认下一个整拍）
 ##   max_beats   最多跑几拍（真实拍数）就截断
 ##   keep_box    结束后不变回文字框、红心继续可动（终局串段用）
 ##   keep_soul   开始时不把红心挪到框底（终局串段用）
@@ -494,7 +495,8 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 	var r: Rect2 = opts["rect"] if opts.has("rect") else C.dodge_box(size.x, size.y)
 	hud.clear_text()
 	hud.btn_hold = false
-	await box.morph(r, 0.3)
+	if box.rect != r:
+		await box.morph(r, 0.3)
 	atk.box = r
 	soul.area = r
 	if opts.get("keep_soul", false):
@@ -524,7 +526,7 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 		await Conductor.wait_beat()
 	atk.begin()
 	var last := Conductor.beat
-	var b_start := last
+	var b_start: float = opts.get("start_beat", last)
 	var max_b: float = opts.get("max_beats", 1e9)
 	var stopped := false
 	var first := true
@@ -538,7 +540,10 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 		last = b
 		atk.prev_t = -0.001 if first else atk.t           # 第一帧从 -0.001 起算，crossed(0) 才会触发（只触发一次）
 		first = false
-		atk.t += db * atk.speed
+		if opts.has("start_beat"):
+			atk.t = maxf(0.0, b - b_start) * atk.speed
+		else:
+			atk.t += db * atk.speed
 		atk.clear_hazards()
 		atk.tick(db * atk.speed)
 		atk.queue_redraw()
@@ -560,6 +565,8 @@ func run_attack(id: String, speed := 1.0, mirror := false, opts := {}) -> void:
 	soul.tether = null
 	soul.solids.clear()
 	cur_attack = null
+	# 立即执行攻击的样式恢复，避免延迟退出覆盖下一段或终局重置。
+	box.mask.remove_child(atk)
 	atk.queue_free()
 	enemy.set_pose(enemy.idle)
 	_shards.clear()

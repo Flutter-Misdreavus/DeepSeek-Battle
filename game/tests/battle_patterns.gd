@@ -298,7 +298,7 @@ func _snow_and_waves() -> void:
 	_check(third == 2, "第三波两个教师须同时在场")
 	a.free()
 	var cutscenes = load("res://battle/cutscenes.gd")
-	_check(cutscenes.MEDLEY_BEATS == 8.0, "混剪每段必须由4拍加倍到8拍")
+	_check(cutscenes.INFINITE_START == 24.0 and cutscenes.INFINITE_BEATS == 32.0 and cutscenes.INFINITE_SPEED == 0.625, "无限上下文必须完整占据第24–56拍")
 	_check(cutscenes.GIANT_START == 56.0 and cutscenes.SWALLOW_START == 72.0 and cutscenes.FINALE_END == 88.0, "终局应在第88拍的鲸吞段结束，不再进入Ctrl+A")
 
 
@@ -489,9 +489,8 @@ func _run() -> void:
 	_flock_edges()
 	_distill_randomness()
 	await _controls_and_health()
-	var medley = load("res://battle/cutscenes.gd").MEDLEY
-	_check(medley.map(func(m): return m[1]) == [1.0, 1.0, 1.0, 1.0], "混剪不能额外加速")
-	_check(not medley.map(func(m): return m[0]).has("p1_marquee"), "混剪不能出现框选删除")
+	_check(Story.PHASES[3]["attacks"] == ["p3_snake", "p3_tetris", "p3_temp"], "第三阶段只能保留原来的前三招")
+	_check(ResourceLoader.exists("res://battle/attacks/fin_infinite.gd") and not ResourceLoader.exists("res://battle/attacks/p3_infinite.gd"), "无限上下文必须归入终局")
 	_check(not ResourceLoader.exists("res://battle/attacks/fin_ctrl_a.gd"), "应移除终局Ctrl+A全屏框选")
 	_battle.queue_free()
 	await process_frame

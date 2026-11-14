@@ -1,9 +1,9 @@
 extends Attack
-## P3-4「无限上下文」
+## 终局「无限上下文」（24–56拍，内部20拍以0.625倍速度完整演出）
 ##
 ## 弹幕框的四条边碎掉，「上下文长度：无限」——红心可以跑遍整个屏幕（按钮区、她身上都能去），
 ## 全屏鲸鱼弹幕分三段扫过来：鲸雨（带缺口）→ 鲸环 → 四臂漩涡。最后碎片飞回来重新拼成框，
-## 把红心关回 200×120 的小框。
+## 把红心收回终局标准大框，继续巨鲸段。
 ## - 所有鲸鱼位置 / 朝向都是 t 的纯函数；缺口在 setup() 里用 rng 预先生好。
 ## - 碎框 / 合框时每帧同时改 box、battle.box.rect、battle.soul.area，合框时把心推进去。
 ## - mirror 不支持（忽略）。
@@ -32,8 +32,9 @@ const VORTEX_SPIN := 0.7
 # 合框
 const MERGE_START := 17.5
 const MERGE_END := 19.0
-const TARGET := Vector2(200, 120)
+const TARGET := Vector2(620, 260)
 
+var _merge_rect := Rect2()
 var _vis := Rect2()
 var _full := Rect2()
 var _orig_fill := C.BLACK
@@ -50,8 +51,9 @@ var _shatter_rect := Rect2()
 
 func setup() -> void:
 	duration = 20.0
-	box_size = Vector2(200, 120)
+	box_size = TARGET
 	no_stop = true
+	_merge_rect = opts.get("merge_rect", C.dodge_box(TARGET.x, TARGET.y))
 	_vis = Rect2(-battle.position, battle.get_viewport_rect().size)
 	_full = Rect2(
 		_vis.position.x + 4.0,
@@ -239,9 +241,9 @@ func tick(_dt: float) -> void:
 	# 合框：线性收回；心被收紧的边界推进去
 	if t >= MERGE_START and t < MERGE_END:
 		var u := (t - MERGE_START) / (MERGE_END - MERGE_START)
-		_set_rect(_lerp_rect(_full, C.dodge_box(TARGET.x, TARGET.y), u))
+		_set_rect(_lerp_rect(_full, _merge_rect, u))
 	if crossed(MERGE_END):
-		_set_rect(C.dodge_box(TARGET.x, TARGET.y))
+		_set_rect(_merge_rect)
 		if battle and is_instance_valid(battle.box):
 			battle.box.border_col = _orig_border
 			battle.box.fill = _orig_fill
