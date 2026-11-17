@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DeepSeek Battle</title>
+<style>
+  html, body { margin: 0; height: 100%; background: black; color: white; }
+  main { position: absolute; inset: max(var(--top, 0px), env(safe-area-inset-top))
+    max(var(--right, 0px), env(safe-area-inset-right))
+    max(var(--bottom, 0px), env(safe-area-inset-bottom))
+    max(var(--left, 0px), env(safe-area-inset-left));
+    display: grid; place-items: center; container-type: size; }
+  canvas { display: block; width: min(100cqw, 177.7778cqh); height: auto;
+    aspect-ratio: 16/9; image-rendering: pixelated; touch-action: none; outline: none; }
+  output { position: absolute; max-width: 85%; text-align: center; font: 16px sans-serif; }
+</style>
+</head>
+<body>
+<main><canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="DeepSeek Battle"></canvas>
+<output id="status" aria-live="polite">正在加载战斗…</output></main>
+<script src="$GODOT_URL"></script>
+<script>
+const canvas = document.getElementById('canvas');
+const statusText = document.getElementById('status');
+const engine = new Engine($GODOT_CONFIG);
+engine.startGame({
+  canvas,
+  onProgress(loaded, total) {
+    if (total > 0) statusText.textContent = '正在加载战斗 ' + Math.floor(loaded * 100 / total) + '%';
+  }
+}).then(() => {
+  statusText.hidden = true;
+  canvas.focus();
+}).catch(error => {
+  statusText.textContent = '战斗加载失败，请刷新重试。' + error.message;
+});
+
+function applySafeArea(state) {
+  if (!state || !state.safeArea) return;
+  for (const side of ['top', 'right', 'bottom', 'left']) {
+    const pixels = Math.max(0, Number(state.safeArea[side]) || 0);
+    document.documentElement.style.setProperty('--' + side, pixels + 'px');
+  }
+}
+
+async function enterToy(toy) {
+  if (!toy || !toy.isSupport) return;
+  if (await toy.isSupport('onContainerChange')) toy.onContainerChange(applySafeArea);
+  if (await toy.isSupport('getContainerState')) applySafeArea(await toy.getContainerState());
+  if (await toy.isSupport('setContainerMode')) {
+    await toy.setContainerMode({orientation: 'landscape', immersive: true});
+  }
+}
+if (window.self !== window.top) {
+  const sdk = document.createElement('script');
+  sdk.src = 'https://s1.hdslb.com/bfs/seed/toy/app/sdk/toy-sdk.js';
+  sdk.onload = () => enterToy(window.toy).catch(error => console.warn('Toy 横屏', error));
+  document.head.appendChild(sdk);
+}
+</script>
+</body>
+</html>
